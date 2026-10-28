@@ -205,6 +205,10 @@ namespace drumchimp
         status.setFont (font (12.0f));
         status.setColour (juce::Label::textColourId, faint);
         addAndMakeVisible (status);
+        libraryStatus.setFont (font (12.0f));
+        libraryStatus.setColour (juce::Label::textColourId, faint);
+        libraryStatus.setJustificationType (juce::Justification::centredRight);
+        addAndMakeVisible (libraryStatus);
 
         setSize (780, 430);
         select (0);
@@ -238,13 +242,19 @@ namespace drumchimp
     void DrumChimpEditor::refreshPads()
     {
         seenKit = processor.kitVersion();
+        seenLibrary = processor.library->version();
         seenMap = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
         for (int i = 0; i < numPads; ++i)
             pads[(size_t) i]->refresh (i == selected, seenMap);
 
         const auto s = processor.padSource (selected);
         padTitle.setText ("Pad " + juce::String (selected + 1) + " · " + defaultRoles[(size_t) selected], juce::dontSendNotification);
-        padSample.setText (s.message.isNotEmpty() ? s.message : s.path.isNotEmpty() ? s.path : juce::String ("Empty: drop a sample on the pad, or Load..."),
+        // Where the library has it: its place and how the classifier sorted it.
+        juce::String where;
+        if (const auto index = processor.library->index(); index != nullptr && s.path.isNotEmpty())
+            if (const auto* info = index->find (s.path.toStdString()))
+                where = juce::String (info->root) + " · " + roleName (info->classification.role) + " · " + juce::String (info->seconds, 2) + " s\n";
+        padSample.setText (s.message.isNotEmpty() ? s.message : s.path.isNotEmpty() ? where + s.path : juce::String ("Empty: drop a sample on the pad, or Load..."),
                            juce::dontSendNotification);
         padSample.setColour (juce::Label::textColourId, s.message.isNotEmpty() ? warning : dim);
         clearButton.setEnabled (s.status != Status::empty);
@@ -267,8 +277,14 @@ namespace drumchimp
     void DrumChimpEditor::timerCallback()
     {
         const auto map = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
-        if (processor.kitVersion() != seenKit || map != seenMap)
+        if (processor.kitVersion() != seenKit || map != seenMap || processor.library->version() != seenLibrary)
             refreshPads();
+
+        const auto lib = processor.library->status();
+        libraryStatus.setText (lib.scanning && lib.samples == 0 ? juce::String ("Library: scanning...")
+                                   : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "
+                                         + juce::String ((int) lib.roots) + " places" + (lib.scanning ? juce::String (" (scanning again)") : juce::String()),
+                               juce::dontSendNotification);
 
         const auto played = processor.takeHits();
         for (int i = 0; i < numPads; ++i)
@@ -307,7 +323,9 @@ namespace drumchimp
         top.removeFromRight (8);
         source.setBounds (top.removeFromRight (120));
         r.removeFromTop (16);
-        status.setBounds (r.removeFromBottom (20));
+        auto statusRow = r.removeFromBottom (20);
+        libraryStatus.setBounds (statusRow.removeFromRight (340));
+        status.setBounds (statusRow);
         r.removeFromBottom (6);
 
         auto padArea = r.removeFromLeft (420);
@@ -321,7 +339,7 @@ namespace drumchimp
         titleRow.removeFromRight (6);
         loadButton.setBounds (titleRow.removeFromRight (70));
         padTitle.setBounds (titleRow);
-        padSample.setBounds (panelArea.removeFromTop (40));
+        padSample.setBounds (panelArea.removeFromTop (54));
         panelArea.removeFromTop (8);
 
         auto knobRow = panelArea.removeFromTop (110);

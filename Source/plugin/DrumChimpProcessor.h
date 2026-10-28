@@ -8,6 +8,7 @@
 //   Samples    loadSample() decodes on a background thread (SampleLoader); the finished kit goes
 //              to the audio thread as a whole bank (DrumEngine::publish). A new instance loads the
 //              Core Library 909 kit (DefaultKit.h) unless the host restores a state first.
+//   Library    the sample library (Library.h), scanned in the background, shared by every instance
 //   State      the parameters, plus each pad's sample path and file size. A sample that is gone
 //              when the set opens shows as missing (Phase 3 will look for it by name).
 #pragma once
@@ -15,6 +16,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../core/engine/TestPattern.h"
 #include "../core/sampler/DrumEngine.h"
+#include "Library.h"
 #include "Parameters.h"
 #include "SampleLoader.h"
 #include <array>
@@ -83,6 +85,7 @@ namespace drumchimp
         Status status() const noexcept;
 
         juce::AudioProcessorValueTreeState state;
+        juce::SharedResourcePointer<Library> library;
 
     private:
         static BusesProperties makeBuses();

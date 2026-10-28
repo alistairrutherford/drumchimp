@@ -6,7 +6,7 @@
 //               sample from Live's browser or Finder on one to load it. A pad lights when it plays.
 //   Pad panel   the selected pad: its sample (Load…, Clear), Level, Pan, Tune, Decay, Velocity,
 //               Choke, Mute and Solo
-//   Status      transport, notes in and out
+//   Status      transport, notes in and out; the library scan
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -100,8 +100,8 @@ namespace drumchimp
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> muteAttachment, soloAttachment;
         std::unique_ptr<juce::FileChooser> chooser;
 
-        juce::Label status;
-        juce::uint32 seenKit = ~0u;
+        juce::Label status, libraryStatus;
+        juce::uint32 seenKit = ~0u, seenLibrary = ~0u;
         NoteMap seenMap = NoteMap::gm;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumChimpEditor)

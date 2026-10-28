@@ -118,42 +118,63 @@ Ableton Drum Rack correctly:
 
 ### 3.2 Sample classifier
 
-This runs once per scan, in the background, and writes an index cache
-(`~/Library/Application Support/DrumChimp/library.json`). Later scans are incremental, by file
-modification time.
+*As built in Phase 2* (`Source/core/library/Classifier.h`, `LibraryIndex.h`; `Source/plugin/Library.h`).
 
-1. **Collect** `.wav`/`.aif`/`.aiff`/`.flac`. Skip `.asd` analysis files, anything under a
-   `Loops` folder, and names containing `loop` or `NNN bpm`.
-2. **Tokenise** the path relative to its root: split on spaces, `-`, `_`, camelCase and
-   letter–digit boundaries, then lower-case (`ClosedHH` → `closed hh`).
-3. **Score each role** from a rule table. Folder tokens weigh more than file-name tokens,
-   because Ableton's folders are reliable. Rules cover synonyms and abbreviations:
+The scan runs in the background when the first DrumChimp opens, and every DrumChimp in the process
+shares it. It keeps a header cache (`~/Library/Application Support/DrumChimp/library-cache.tsv`:
+path, size, modification time, length). A file whose size and modification time haven't changed
+isn't read again. Classifications aren't cached: they take microseconds, so a better classifier
+needs no rescan.
 
-   | Role | Strong tokens (examples) |
+1. **Collect** `.wav`/`.aif`/`.aiff`/`.flac`. Skip `.asd` analysis files, anything in a `Loops`
+   folder, names containing `loop` or `NNN bpm`, and anything over 30 s (too long for a pad).
+2. **Tokenise** the path below its root: split on anything not a letter or digit, on camelCase
+   and on letter–digit boundaries, then lower-case (`ClosedHH` → `closed hh`). Join the pairs that
+   mean one thing: *hi hat*, *bass drum*, *side stick*, *rim shot*, *e perc*, *floor tom*.
+3. **Not a drum** → *Unsorted*:
+   - a folder of something else (Synth, Stab, Vocal/Vox, Bass, Chords, Piano & Keys, Guitar,
+     Strings, Instrument, Metronomes/Defaults, a top-level FX, or any Multisamples folder except
+     Drum Machines);
+   - a drum folder of effects or utilities (`FX Hit`, `Utility`).
+4. **A role folder decides**, the deepest one. Ableton already sorts its one-shots by role, so
+   this is the main rule. The name only refines it:
+   - in a Snare folder, a name with *rim / rimshot / sidestick* is a Rim, and one starting with
+     *clap* is a Clap;
+   - in a Cymbal folder, *ride* is a Ride;
+   - in a hat folder, *open/half* or *closed/pedal/foot/tight* in the name (or the folder) decide;
+     with neither, under 0.5 s is closed.
+
+   A percussion folder (Shaker, Tambourine, Conga, Bongo, Timbales, Wood, Bell, Misc and
+   Electronic Percussion) is always Perc, whatever drum words its names contain (*Timbale Rim*,
+   *E-Perc Screech Kick*).
+5. **No role folder:** the name's first role word decides (`Drum Machines/808/Kick 808 Tone1`,
+   or a user's `BD_909_01.wav`):
+
+   | Role | Words |
    |---|---|
-   | Kick | kick, kik, bd, bassdrum, bass drum |
-   | Snare | snare, sd, sn |
-   | Clap | clap, clp, handclap |
-   | Rim | rim, rimshot, rs, sidestick, stick |
-   | Closed hat | hihat/hh/hat + closed/cl/ch/tight/pedal |
-   | Open hat | hihat/hh/hat + open/op/oh |
-   | Tom (low/mid/high) | tom, tm + lo/low/floor, mid, hi/high |
+   | Kick | kick, kik, kck, bd, bass drum, kick drum |
+   | Snare | snare, snr, sd |
+   | Clap | clap, clp, handclap, snap |
+   | Rim | rim, rimshot, side stick, rimclick |
+   | Closed / Open hat | hihat, hat, hh (then open/closed as in 4); ch, chh / oh, ohh on their own |
+   | Tom | tom, floor tom (range: lo/low/floor, mid/med, hi/high/rack) |
    | Crash | crash, cymbal, cym, splash, china |
-   | Ride | ride, rd, bell (in a cymbal context) |
-   | Perc | shaker, tamb/tambo, conga, bongo, timbale, wood, block, cowbell, e-perc, perc |
+   | Ride | ride |
+   | Perc | perc, e-perc, shaker, tamb, conga, bongo, timbale, wood, block, cowbell, bell, triangle, clave, guiro, cabasa, agogo, maracas, cuica, tabla, timpani |
 
-   Combination rules settle conflicts: `Snare … Rimshot` → Rim (or Snare with a *rimshot*
-   tag); `Hihat` without open/closed → Closed hat if it is short, otherwise Open hat.
-4. **Check the length** from the file header (no decoding needed). Anything longer than 4 s is
-   skipped, apart from cymbals, which can be up to 10 s.
-5. **Pick the best role** and keep its confidence. Below the threshold, the sample goes to
-   *Unsorted*: it is still in the browser, but Randomise never picks it.
-6. **Tag the family:** machine and character tokens (`808`, `909`, `707`, `505`, `linn`,
-   `acoustified`, `kindified`, `electrified`, `vinyl`, `dub`, `impact`, …), plus the pack and
-   the source folder. Kit coherence uses these (§3.3).
+   A `Chops` folder of break slices counts only a role word that comes first (*Snare Ghosts*,
+   not *Heavy Kicks*), and never a slice of whole drums or a fill.
+6. **Too long for a one-shot** → *Unsorted*. Kicks, snares, toms, cymbals and open hats may ring
+   for up to 10 s (808s, floor toms); everything else, 4 s.
+7. **Confidence and tags.** Confidence is 0.95 from a role folder, 0.8 from a name's first word
+   and 0.6 from a later one, scaled by 0.8 when only the length decided a hat. Tags are the
+   name's other words (`808`, `acoustified`, `vinyl`, …), for the kit builder's families (§3.3).
+   *Unsorted* samples can still be browsed and assigned by hand, but Randomise never picks them.
 
-A dev tool, `Tools/classify`, writes the whole library as a CSV (path, role, confidence,
-family). That makes the misses easy to read and is the basis for the hand-labelled test set.
+A dev tool, `Tools/classify.sh`, scans and classifies the whole library, prints the timings and
+counts, and with `--csv` writes one row per sample (root, path, length, role, confidence, tom
+range, tags, reason). That makes the misses easy to read and is the basis for the hand-labelled
+test set.
 
 ### 3.3 Kit builder and Randomise
 
@@ -248,7 +269,7 @@ Route A covers "record into the same track" for v1, with no set-up. Route C make
 | Module | Job |
 |---|---|
 | `LibraryRoots` | Find Ableton's library folders and any user folders; keep them in Settings. |
-| `LibraryScanner` | Walk the roots on a background thread; read file headers (length, rate); keep the cache up to date. |
+| `LibraryScanner` (`scanLibrary`, `Library`) | Walk the roots on a background thread; read file headers (length, rate); keep the cache up to date. |
 | `Classifier` | Path → (role, confidence, family tags). Pure and table-driven, so it is easy to unit-test. |
 | `LibraryIndex` | Look up samples by role and family; search text for the browser. |
 | `KitBuilder` | Choose samples for the pads (coherence, locks, seed); keep the kit history. |
@@ -412,4 +433,39 @@ The sampler and pads. Dropping a sample on a pad now loads and plays it.
   through *MIDI From*, is still exact over 4 bars. A duplicated track plays the same kit restored
   from its state (original muted, master at one track's level).
 
-**Next:** Phase 2, the library scanner and the classifier.
+### Phase 2 (2026-10-28): done, G2 and G3 pass
+
+The library scanner and the classifier (§3.2 describes them as built).
+
+- **G2, finding the library:** the roots come from `Library.cfg` and the app (9 on this Mac). A
+  cold scan with every header read takes 0.5–0.9 s; a warm one from the cache takes 0.3 s. The
+  target was under 10 s. One scan is shared by every instance (`SharedResourcePointer`); the
+  editor's status line shows *Library: 3829 drums in 5062 samples, 9 places*, and the pad panel
+  shows where a pad's sample is in the library and how it was sorted.
+- **G3, sorting by name: 300 / 300** on the hand-labelled fixture (`Tests/fixtures/
+  classifier_labels.csv`). How it was made: a stratified sample of this Mac's library (8
+  ambiguous hats, 52 from awkward folders (Chops, Bell, FX Hit, E-Perc, Drum Machines, Cymbal),
+  35 non-drums, 205 at random). I labelled them from their names before writing the rules, with
+  every acceptable role where a sound is honestly ambiguous (*Snare Clap Combo*: snare or clap).
+  The score is high because Ableton's folders do most of the work. The name rules matter for
+  third-party packs and user folders; 25 synthetic names cover those (`BD_909_01`, `OH 1`,
+  `Open Hats/Hat 01`, `Bass Drums/…`, a `Bass` folder of notes, loops), with no real non-Ableton
+  library to check against yet.
+- **The whole library** (`Tools/classify.sh`): 621 kicks, 634 snares, 210 claps, 194 rims, 389
+  closed and 220 open hats, 497 toms, 165 crashes, 109 rides, 790 perc; 1,233 Unsorted (939 in
+  non-drum folders, 161 effects, 95 without a drum word, 32 too long, 6 break slices). 21 hats
+  were decided by length; 166 of the 497 toms have a range in their name.
+- **A fix found on the whole library:** the first length limit (4 s, 10 s for cymbals) dropped
+  real acoustic floor toms (4–7 s) and 808 kicks (up to 10 s). Now kicks, snares, toms, cymbals and
+  open hats may ring for 10 s.
+- **Tests:** `test_classifier` (tokens, 25 synthetic names plus tom ranges, tags and confidence, the 300-path fixture with every miss
+  listed) and `test_library` (a scan of a made-up library: what's found and skipped, the cache
+  (a second scan reads no headers, a changed file is read again, a deleted one drops out), and
+  cancelling) join the core tests. The host tests add the shared library: the scan finishes, the
+  cache is written, the default kit's eight samples are found in their pads' roles, and a rescan
+  works. `pluginval` strictness 10 passes.
+- **Not yet checked in Live:** Live still has the Phase 1 build loaded. The scan runs the same way
+  in any host, and the host tests run it in-process.
+
+**Next:** Phase 3, kits. The kit builder, Character, locks, Randomise, the library browser and
+kit presets.

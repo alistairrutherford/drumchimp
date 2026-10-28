@@ -9,6 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$HERE/../Source"
 BUILD="$HERE/build"
 mkdir -p "$BUILD"
+export DRUMCHIMP_FIXTURES="$HERE/fixtures"
 
 compile_and_run () {
     local name="$1"
@@ -23,3 +24,5 @@ compile_and_run () {
 
 compile_and_run test_core
 compile_and_run test_sampler
+compile_and_run test_classifier
+compile_and_run test_library

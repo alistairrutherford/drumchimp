@@ -1,0 +1,301 @@
+path,seconds,expected
+Chop and Swing/Samples/One Shots/Drums/Bell/Bells Jingle.aif,1,perc
+Chop and Swing/Samples/One Shots/Drums/Chops/Dudum Chop.aif,0.72,unsorted
+Chop and Swing/Samples/One Shots/Drums/Chops/FatDomino Drums 03 73bpm.aif,1.71,unsorted
+Chop and Swing/Samples/One Shots/Drums/Chops/FatDomino Drums 08.aif,0.85,unsorted
+Chop and Swing/Samples/One Shots/Drums/Chops/Glyphx Chop.aif,0.782,unsorted
+Chop and Swing/Samples/One Shots/Drums/Chops/Ill Fill.aif,1.76,unsorted
+Chop and Swing/Samples/One Shots/Drums/Chops/Snare Ghosts.aif,0.771,snare|unsorted
+Chop and Swing/Samples/One Shots/Drums/Clap/Clap Analog Temper.aif,0.322,clap
+Chop and Swing/Samples/One Shots/Drums/Clap/Clap Vicious.aif,1.51,clap
+Chop and Swing/Samples/One Shots/Drums/Cymbal/Crash Sticky.aif,4.43,crash
+Chop and Swing/Samples/One Shots/Drums/Cymbal/Crash Streets.aif,4,crash
+Chop and Swing/Samples/One Shots/Drums/Cymbal/Cymbal Crash Food.aif,3.02,crash
+Chop and Swing/Samples/One Shots/Drums/Hihat/Hihat Closed Buttermilk.aif,3,closedHat
+Chop and Swing/Samples/One Shots/Drums/Hihat/Hihat Closed Dobbs.aif,0.484,closedHat
+Chop and Swing/Samples/One Shots/Drums/Hihat/Hihat Closed Streets.aif,0.218,closedHat
+Chop and Swing/Samples/One Shots/Drums/Hihat/Hihat Mix Bang.aif,1.19,openHat|closedHat
+Chop and Swing/Samples/One Shots/Drums/Hihat/Hihat Open Rub.aif,0.613,openHat
+Chop and Swing/Samples/One Shots/Drums/Kick/Kick Classic Blueprint.aif,1,kick
+Chop and Swing/Samples/One Shots/Drums/Misc Percussion/Click Saucepan.aif,1.57,perc
+Chop and Swing/Samples/One Shots/Drums/Snare/Snare Pocket Gems.aif,0.274,snare
+Chop and Swing/Samples/One Shots/Drums/Snare/Snare Tambo Ironman.aif,0.875,snare
+Chop and Swing/Samples/One Shots/Drums/Snare/Snare Wishful.aif,1.34,snare
+Chop and Swing/Samples/One Shots/Drums/Tom/Tom Crush Wah Soul.aif,0.885,tom
+Chop and Swing/Samples/One Shots/Stabs/Guitar Stab Bang.aif,0.526,unsorted
+Chop and Swing/Samples/One Shots/Stabs/Horn Stab Wah Soul.aif,2.34,unsorted
+Chop and Swing/Samples/One Shots/Stabs/Stab Brass Alley.aif,0.587,unsorted
+Core Library/Defaults/Metronomes/Samples/Wood/Metronome.aif,0.375,unsorted|perc
+Core Library/Samples/Multisamples/Drum Machines/808/Cymbal 808 Tone1 h.wav,3.58,crash
+Core Library/Samples/Multisamples/Drum Machines/808/Cymbal 808 Tone8 h.wav,3.93,crash
+Core Library/Samples/Multisamples/Drum Machines/808/Kick 808 Tone1 p.wav,2.01,kick
+Core Library/Samples/Multisamples/Drum Machines/808/Kick 808 Tone5 t.wav,1.73,kick
+Core Library/Samples/Multisamples/Drum Machines/808/Kick 808 Tone8 p.wav,2.13,kick
+Core Library/Samples/Multisamples/Drum Machines/808/Snare 808 Tone11 f.wav,0.191,snare
+Core Library/Samples/Multisamples/Drum Machines/808/Snare 808 Tone11.wav,0.316,snare
+Core Library/Samples/Multisamples/Drum Machines/808/Snare 808 Tone8 p.wav,0.191,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Kick 909 Tune5 g.wav,0.668,kick
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune10 k.wav,0.478,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune10 u.wav,0.482,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune13 u.wav,0.478,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune16 f.wav,0.476,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune16 u.wav,0.471,snare
+Core Library/Samples/Multisamples/Drum Machines/909/Snare 909 Tune7.wav,0.492,snare
+Core Library/Samples/Multisamples/Synths/ARP 5th/ARP 5th - C6.aif,1.48,unsorted
+Core Library/Samples/Multisamples/Synths/Acid Meltdown/Acid Meltdown - C4.aif,0.562,unsorted
+Core Library/Samples/Multisamples/Synths/Dark Thought/Dark Thought - C2.aif,0.801,unsorted
+Core Library/Samples/Multisamples/Synths/Machine Punk/Machine Punk - C3.aif,0.784,unsorted
+Core Library/Samples/Multisamples/Synths/Mamas Bass/Mamas Bass - F#3.aif,0.587,unsorted
+Core Library/Samples/Multisamples/Synths/Metallic Love/Metallic Love - C2.aif,2.04,unsorted
+Core Library/Samples/Multisamples/Synths/Metallic Love/Metallic Love - C5.aif,1.76,unsorted
+Core Library/Samples/Multisamples/Synths/Ob Sq B/Ob Sq B 2.aif,0.753,unsorted
+Core Library/Samples/Multisamples/Synths/Pulse Bass/Pulse Bass - C5.aif,1.28,unsorted
+Core Library/Samples/Multisamples/Synths/Pulse Bass/Pulse Bass - F#4.aif,1.28,unsorted
+Core Library/Samples/Multisamples/Synths/Sandblaster/Sandblaster - F#5 - 2.aif,0.546,unsorted
+Core Library/Samples/Multisamples/Synths/Sine Saw Square/Sine Saw Square Square.aif,0.673,unsorted
+Core Library/Samples/Multisamples/Synths/Smooth Synth/Smooth Synth - C0 - 1.aif,0.828,unsorted
+Core Library/Samples/One Shots/Drums/Bell/Cowbell 808.aif,0.33,perc
+Core Library/Samples/One Shots/Drums/Bell/Cowbell BNYX.wav,0.874,perc
+Core Library/Samples/One Shots/Drums/Bell/Cowbell SP Sweetened.wav,0.0967,perc
+Core Library/Samples/One Shots/Drums/Bell/Triangle DMX Vinyl.wav,0.091,perc
+Core Library/Samples/One Shots/Drums/Clap/Clap DECAP 1.wav,0.125,clap
+Core Library/Samples/One Shots/Drums/Clap/Clap Tight.wav,0.197,clap
+Core Library/Samples/One Shots/Drums/Clap/Snap Beyond Click.wav,0.135,clap
+Core Library/Samples/One Shots/Drums/Clap/Snap Tamuz.wav,1.03,clap
+Core Library/Samples/One Shots/Drums/Conga/Conga DECAP 1.wav,0.89,perc
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Acoustified High.wav,1.04,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Brkroni.aif,2.59,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash China Stick Hit Cop Style.wav,4.66,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Chop Yolo.wav,1,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash DMX Real 2.wav,2.74,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Dry Session Soft 2.aif,8.91,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Kick Reverse.aif,7.74,crash|unsorted
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Kindified 2.wav,0.368,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Lofi.wav,0.248,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Real SP 1.wav,2.45,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Soft Acoustic.wav,3.02,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Crash Tamuz 3.wav,6.82,crash
+Core Library/Samples/One Shots/Drums/Cymbal/Cymbal HH Sizzle.wav,2.18,openHat|crash
+Core Library/Samples/One Shots/Drums/Cymbal/Cymbal Lofi.aif,1.76,crash
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc 9.aif,0.203,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Blop Charred.wav,2.15,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Buzz Hymned.wav,0.262,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Metal 2.aif,0.104,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Object.aif,0.15,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Reson.aif,0.252,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Ring Shift Moon Golf 4.wav,0.168,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Screech Kick.wav,0.922,perc|kick
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Short and Prune.wav,0.176,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Sound Objects Knock Ambient.aif,1.5,perc
+Core Library/Samples/One Shots/Drums/Electronic Percussion/E-Perc Tuned Block Low.aif,0.556,perc
+Core Library/Samples/One Shots/Drums/FX Hit/FX Alien Perc.aif,0.472,unsorted|perc
+Core Library/Samples/One Shots/Drums/FX Hit/FX Blop Techno.aif,1.76,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Broken Box.wav,0.523,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Buzz Short.aif,0.0942,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Drip 2.wav,0.363,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Ice Cubes.aif,0.583,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Motor Windup.wav,2.8,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Punch Unsounded.wav,0.4,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Scorched Hit.wav,0.601,unsorted
+Core Library/Samples/One Shots/Drums/FX Hit/FX Vocoder 3.aif,0.284,unsorted
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Alive.wav,0.1,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Boxen.wav,0.451,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Delay High.wav,0.219,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed ER Fenk.wav,2.27,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Electrified 1.wav,0.074,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Filter Choke.aif,0.308,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Future Proof.wav,0.0655,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Grassy.wav,0.113,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed Hobby.wav,1.06,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Closed LD.aif,0.27,closedHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Half-Open Stick Shank Yester Years.aif,0.878,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Half-Open Stick Tip Soft 2.aif,1.02,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open 505.aif,0.454,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Blue Room.wav,0.944,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Brim.wav,0.182,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Chopped.wav,0.233,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open DECAP 2.wav,0.292,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Hurricane.wav,0.84,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open LDre 1.wav,0.516,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Move.wav,0.592,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open OK.wav,0.5,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Shuffling.wav,0.433,openHat
+Core Library/Samples/One Shots/Drums/Hihat/Hihat Open Vinyl SP 1.wav,0.159,openHat
+Core Library/Samples/One Shots/Drums/Kick/Kick 505 Layer.wav,0.498,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick 808 DMX.wav,0.156,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick 808 Long.wav,3.81,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick BNYX 1.wav,0.324,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Black Hole 1.wav,0.149,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Bluesbreak.wav,0.663,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Buzzy Bang.wav,0.309,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Calypso.wav,1.23,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Combo Burned.wav,1.5,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick ER Fenk 1.wav,1.61,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick LDre 8.wav,0.397,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Low Machine.wav,0.634,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Popped Noise.aif,0.339,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Shadow.wav,0.287,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Slappy Noise.wav,0.523,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Stereo Fool 1.wav,0.153,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Synth Tonal Mkit.wav,2.18,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Vinyl DLJ 3.wav,0.163,kick
+Core Library/Samples/One Shots/Drums/Kick/Kick Volt.aif,0.75,kick
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Dirty Metal.wav,1.5,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Knock Rattle.wav,0.0735,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Object.aif,0.229,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Stacks Tamuz.wav,1.47,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Stick LDre 1.wav,0.125,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Perc Tiny.wav,0.0563,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Temple Drum Vinyl 3.wav,0.56,perc
+Core Library/Samples/One Shots/Drums/Misc Percussion/Timbale Rim Thumb.wav,0.638,perc
+Core Library/Samples/One Shots/Drums/Ride/Ride 909.aif,1.19,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride Court.wav,0.812,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride DMX.wav,1.73,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride Filter Swell.aif,1.75,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride HH Med.wav,1.59,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride Roomy.wav,2.47,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride Slackjaw.aif,1.61,ride
+Core Library/Samples/One Shots/Drums/Ride/Ride Tamuz.wav,3.86,ride
+Core Library/Samples/One Shots/Drums/Rim/Rim 90s MPC.wav,0.146,rim
+Core Library/Samples/One Shots/Drums/Rim/Rim Bupp.wav,0.12,rim
+Core Library/Samples/One Shots/Drums/Rim/Rim Fenk Clap.wav,2.11,rim|clap
+Core Library/Samples/One Shots/Drums/Rim/Rim LDre 2.wav,0.143,rim
+Core Library/Samples/One Shots/Drums/Rim/Rim Sidestick Punch.aif,0.643,rim
+Core Library/Samples/One Shots/Drums/Shaker/Shake Deep Fried.wav,1.14,perc
+Core Library/Samples/One Shots/Drums/Shaker/Shaker Acoustified.aif,1.05,perc
+Core Library/Samples/One Shots/Drums/Snare/Snare 4 A Ride.wav,0.165,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Clap Combo.wav,1.85,snare|clap
+Core Library/Samples/One Shots/Drums/Snare/Snare DECAP 5.wav,0.976,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare DMX Core.wav,0.183,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Hot Ring.wav,0.257,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Phive 1.wav,0.12,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Phive 2.wav,0.185,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Prommer Vinyl.wav,0.148,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Roll Taka.wav,1.6,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Stick Hit 2.wav,1.15,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Stick Hit Medium Dry Session.aif,0.434,snare
+Core Library/Samples/One Shots/Drums/Snare/Snare Verb H3500 2.wav,1.02,snare
+Core Library/Samples/One Shots/Drums/Tambourine/Tamb Rattle.aif,0.6,perc
+Core Library/Samples/One Shots/Drums/Tambourine/Tamb Simple.wav,0.682,perc
+Core Library/Samples/One Shots/Drums/Tom/Tom 606 PEQ2 B2.wav,0.358,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom 808 Mid DMX.wav,0.395,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom 80s Space Craft 1.wav,0.547,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Analog 5.aif,0.865,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Blop Electrified.aif,0.662,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Bucket.wav,0.369,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom CD 456.aif,0.526,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom ED10 Fat 3.wav,2.1,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom ER Fenk 2.wav,1.66,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Electronic SP 3.wav,0.36,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom KPR 1.wav,0.653,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Pete.aif,0.748,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Phive.wav,0.692,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom RK Dry.wav,1.39,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom RKTD 2.wav,0.965,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom RKTD 9.wav,0.712,tom
+Core Library/Samples/One Shots/Drums/Tom/Tom Reg MPC 2.wav,0.305,tom
+Core Library/Samples/One Shots/Drums/Wood/Wood Buzz.wav,0.239,perc
+Core Library/Samples/One Shots/Drums/Wood/Wood Clack.wav,0.44,perc
+Core Library/Samples/One Shots/Drums/Wood/Wood Hall.aif,1.78,perc
+Core Library/Samples/One Shots/FX/Siren Cookin.wav,2.64,unsorted
+Core Library/Samples/One Shots/Instrument/Strings/Strings Pizz Stage C3.wav,2.81,unsorted
+Core Library/Samples/One Shots/Instrument/Synth/808 Heavy E.wav,2.2,unsorted|kick
+Core Library/Samples/One Shots/Instrument/Synth/808 Oracle 4.wav,2.45,unsorted|kick
+Core Library/Samples/One Shots/Instrument/Synth/808 Time Stopper C.wav,2.16,unsorted|kick
+Core Library/Samples/One Shots/Instrument/Synth/Synth Chord Analog Stab.wav,1.69,unsorted
+Core Library/Samples/One Shots/Instrument/Synth/Synth Chord F#6add9.aif,2.47,unsorted
+Core Library/Samples/One Shots/Instrument/Synth/Synth Note Section.aif,0.0922,unsorted
+Core Library/Samples/One Shots/Instrument/Synth/Synth Note Spectral 14.aif,0.0153,unsorted
+Core Library/Samples/One Shots/Stab/Stab Fade Road Works.wav,2.02,unsorted
+Core Library/Samples/One Shots/Stab/Stab Orchestra Hit Vinyl 3.wav,3.56,unsorted
+Core Library/Samples/One Shots/Stab/Stab Rit Gmin.wav,0.567,unsorted
+Core Library/Samples/One Shots/Stab/Stab Road Sweep.aif,3.54,unsorted
+Core Library/Samples/One Shots/Stab/Stab Synth Proga Fmin.wav,0.25,unsorted
+Core Library/Samples/One Shots/Stab/Stab Twirly.wav,2.02,unsorted
+Core Library/Samples/One Shots/Vocal/Vocal Baby Hey.wav,0.498,unsorted
+Core Library/Samples/One Shots/Vocal/Vocal Long Yay.aif,1.04,unsorted
+Core Library/Samples/One Shots/Vocal/Vocal That Bass.wav,1.19,unsorted
+Drum Essentials/Samples/Drums/Bell/Cowbell Kindified.aif,0.313,perc
+Drum Essentials/Samples/Drums/Bell/Cowbell SP.aif,0.399,perc
+Drum Essentials/Samples/Drums/Bell/Cowbell-808.aif,0.33,perc
+Drum Essentials/Samples/Drums/Bongo/Bongo Low Open-Hard.aif,0.593,perc
+Drum Essentials/Samples/Drums/Clap/Clap Acoustified 01 1.aif,0.187,clap
+Drum Essentials/Samples/Drums/Clap/Clap Acoustified 1.aif,0.268,clap
+Drum Essentials/Samples/Drums/Clap/Clap BitColored.aif,0.269,clap
+Drum Essentials/Samples/Drums/Clap/Clap Chelsea Layer.aif,0.184,clap
+Drum Essentials/Samples/Drums/Clap/Clap Dub Short.aif,0.469,clap
+Drum Essentials/Samples/Drums/Clap/Clap Electrified.aif,0.289,clap
+Drum Essentials/Samples/Drums/Clap/Clap Lo Kindified.aif,0.48,clap
+Drum Essentials/Samples/Drums/Conga/Conga-808-Mid.aif,0.227,perc
+Drum Essentials/Samples/Drums/Cymbal/Cymbal-C78.aif,0.49,crash
+Drum Essentials/Samples/Drums/Electronic Percussion/Clave-808.aif,0.0949,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/Click Burned.aif,0.0553,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc BittyBot.aif,0.0662,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc MoonGolfRingShift 3.aif,0.192,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Charred 1.aif,0.705,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Charred 3.aif,0.369,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Charred 4.aif,0.328,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Charred 7.aif,0.289,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Charred 9.aif,0.27,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Kindified 2.aif,0.594,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/E-Perc Strike Powered 4.aif,0.2,perc
+Drum Essentials/Samples/Drums/Electronic Percussion/Guiro-C78-Short.aif,0.27,perc
+Drum Essentials/Samples/Drums/FX Hit/FX Hit Hymned 12.aif,0.385,unsorted
+Drum Essentials/Samples/Drums/FX Hit/FX Hit Hymned 2.aif,0.21,unsorted
+Drum Essentials/Samples/Drums/FX Hit/FX Hit Hymned 3.aif,0.152,unsorted
+Drum Essentials/Samples/Drums/FX Hit/FX Hit Hymned 4.aif,0.202,unsorted
+Drum Essentials/Samples/Drums/FX Hit/FX Hit Hymned 5.aif,1.67,unsorted
+Drum Essentials/Samples/Drums/Hihat/HiHat Closed Noise Soft.aif,0.196,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat BlackHole Closed 1.aif,0.314,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat BlackHole Closed 2.aif,0.217,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Bring Em Open.aif,0.733,openHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Closed Fenk 2.aif,0.656,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Closed Hi Powered.aif,0.0432,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Closed Loose Foot.aif,0.13,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Closed Tap Clinical.aif,0.897,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat Open 808 2 Onyx.aif,0.965,openHat
+Drum Essentials/Samples/Drums/Hihat/Hihat-C78.aif,0.0538,closedHat
+Drum Essentials/Samples/Drums/Hihat/Hihat-SessionDry-Stick-Tip-002-Hard.aif,0.471,closedHat|openHat
+Drum Essentials/Samples/Drums/Hihat/Hihat-SessionDry-Stick-Tip-002-Soft.aif,0.427,closedHat|openHat
+Drum Essentials/Samples/Drums/Hihat/Hihat-SessionDry-Stick-Tip-003-Hard.aif,0.664,closedHat|openHat
+Drum Essentials/Samples/Drums/Hihat/Hihat-SessionDry-Stick-Tip-005-Soft.aif,1.19,closedHat|openHat
+Drum Essentials/Samples/Drums/Hihat/OpenHH Acoustified 05.aif,1.1,openHat
+Drum Essentials/Samples/Drums/Kick/Kick 909 Air.aif,1.41,kick
+Drum Essentials/Samples/Drums/Kick/Kick Acoustified 10 2.aif,0.501,kick
+Drum Essentials/Samples/Drums/Kick/Kick D55 Tone 4.aif,0.21,kick
+Drum Essentials/Samples/Drums/Kick/Kick Hymned.aif,0.539,kick
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Acoustified 1.aif,0.524,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Acoustified 2.aif,0.361,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Kindified 4.aif,0.888,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Lo Hybrid Sense.aif,2.5,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Metallic Tube Raged.aif,0.445,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Metallic Wood Acoustified.aif,1.07,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Stick Bottle Long.aif,0.815,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Stick Noise.aif,1.08,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Perc Tiny Cavern Anvil.aif,1.74,perc
+Drum Essentials/Samples/Drums/Misc Percussion/Timp Orch MPC 2.aif,1.79,perc|tom
+Drum Essentials/Samples/Drums/Ride/Ride Acoustified 05.aif,2.63,ride
+Drum Essentials/Samples/Drums/Ride/Ride Bell Kindified 3.aif,2.8,ride
+Drum Essentials/Samples/Drums/Ride/RideBell Kindified 09.aif,3.9,ride
+Drum Essentials/Samples/Drums/Rim/Rim Chelsea Soft.aif,0.148,rim
+Drum Essentials/Samples/Drums/Rim/Rim Sidestick Acoustified 1.aif,0.275,rim
+Drum Essentials/Samples/Drums/Snare/Snare Bottom Mic.aif,1.68,snare
+Drum Essentials/Samples/Drums/Snare/Snare Electrified 1.aif,0.348,snare
+Drum Essentials/Samples/Drums/Snare/Snare Kindified 10.aif,0.412,snare
+Drum Essentials/Samples/Drums/Snare/Snare MarsDisco 2.aif,0.141,snare
+Drum Essentials/Samples/Drums/Snare/Snare PRL1490 Center.aif,3.27,snare
+Drum Essentials/Samples/Drums/Snare/Snare Powered 6.aif,0.571,snare
+Drum Essentials/Samples/Drums/Snare/Snare-SessionDry-Stick-Hit-Medium.aif,0.434,snare
+Drum Essentials/Samples/Drums/Tambourine/Tamb Acoustified 04.aif,0.245,perc
+Drum Essentials/Samples/Drums/Tom/Tom 505 ASR 2.aif,0.354,tom
+Drum Essentials/Samples/Drums/Tom/Tom Air Synth.aif,0.946,tom
+Drum Essentials/Samples/Drums/Tom/Tom D-ulator Mid.aif,0.445,tom
+Drum Essentials/Samples/Drums/Tom/Tom DMX Fatso 5.aif,0.865,tom
+Drum Essentials/Samples/Drums/Tom/Tom Electrified 01.aif,0.557,tom
+Drum Essentials/Samples/Drums/Tom/Tom Electronic SP 1.aif,0.23,tom
+Drum Essentials/Samples/Drums/Tom/Tom Kindified 01.aif,0.545,tom
+Drum Essentials/Samples/Drums/Tom/Tom Overdrive Impact Long.aif,0.647,tom
+Drum Essentials/Samples/Drums/Tom/Tom-808-Mid.aif,0.362,tom
+Drum Essentials/Samples/Drums/Wood/Wood Unsaned.aif,0.433,perc
+Singularities/Samples/Hihat/Mid Hat 709.aif,0.6,closedHat|openHat
+Singularities/Samples/Hihat/Mid Hat-RTO.aif,0.429,closedHat|openHat

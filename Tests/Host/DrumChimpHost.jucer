@@ -12,6 +12,7 @@
       <FILE id="hoF002" name="Parameters.cpp" compile="1" resource="0" file="../../Source/plugin/Parameters.cpp"/>
       <FILE id="hoF003" name="SampleLoader.cpp" compile="1" resource="0" file="../../Source/plugin/SampleLoader.cpp"/>
       <FILE id="hoF004" name="DrumChimpEditor.cpp" compile="1" resource="0" file="../../Source/ui/DrumChimpEditor.cpp"/>
+      <FILE id="hoF005" name="Library.cpp" compile="1" resource="0" file="../../Source/plugin/Library.cpp"/>
     </GROUP>
   </MAINGROUP>
   <MODULES>

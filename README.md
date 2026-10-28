@@ -4,10 +4,12 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 1 is done (PLAN.md §10): eight sampler pads with Level, Pan, Tune, Decay,
+**Status:** Phase 2 is done (PLAN.md §10). Eight sampler pads with Level, Pan, Tune, Decay,
 Velocity, Choke, Mute and Solo; drop a sample from Live's browser or Finder on a pad, or use
-Load…. A new instance starts with the Core Library's 909 kit. The pattern generator is still the
-Phase 0 test pattern (Source: Generator), and there's no library browser or Randomise yet.
+Load…. A new instance starts with the Core Library's 909 kit. In the background, DrumChimp finds
+your Ableton library (Core Library, packs, User Library, Places) and sorts every one-shot into a
+drum role; the status line shows the count. The pattern generator is still the Phase 0 test
+pattern, and there's no browser or Randomise yet (Phase 3).
 
 ## Install
 
@@ -26,7 +28,7 @@ Restart Live afterwards: Live keeps a plug-in's old binary loaded until it quits
 Tests/run_tests.sh            # core tests (no JUCE)
 Tests/run_host_tests.sh       # processor tests (JUCE console app): loading, timing, state, no allocation
 Tests/run_validation.sh       # pluginval strictness 10 on the installed VST3
-Tools/scan_library.sh         # spike (d): time a scan of the Ableton library (--csv FILE for the list)
+Tools/classify.sh             # scan and classify the Ableton library: timings, counts (--csv FILE: every sample)
 ```
 
 ## Phase 0 spikes
@@ -38,7 +40,7 @@ The Phase 0 build logged what it saw to `~/Library/Logs/DrumChimp/spike.log` (la
 | (a) MIDI out → *MIDI From* | Automated through ClaudeLiveBridge: DrumChimp on track 1 (Source: Generator), a MIDI track with *MIDI From: 1-DrumChimp → DrumChimp*, armed; record and read the clip's notes. |
 | (b) Drag-out onto the same track | **By hand**, below. |
 | (c) Drop from Live's browser | **By hand**, below. |
-| (d) Library scan time | `Tools/scan_library.sh`. |
+| (d) Library scan time | `Tools/scan_library.sh` (since replaced by `Tools/classify.sh`). |
 | (e) A Remote Script can tell DrumChimps apart | Read the *Instance ID* parameter through the LOM (ClaudeLiveBridge `list_parameters`). |
 
 ### By hand in Live (b and c)

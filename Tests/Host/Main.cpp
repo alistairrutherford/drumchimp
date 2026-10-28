@@ -11,6 +11,8 @@
 //                notes, the generator, a loop jump and a sample swap all happen
 //   5. Default   a new instance loads the Core Library 909 kit (skipped without a Core Library)
 //   6. Editor    opens and closes with a kit loading
+//   7. Library   the background scan finishes, is shared by every instance, and sorts the default
+//                kit's samples into their roles (skipped without a Core Library)
 //
 //   DrumChimpHost
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -336,6 +338,34 @@ namespace
         check (all909, "eight 909 samples from the Core Library");
     }
 
+    void testLibrary()
+    {
+        std::cout << "7. Library\n";
+        DrumChimpProcessor p, q;
+        check (&*p.library == &*q.library, "one library for every instance");
+        check (waitFor ([&] { return p.library->index() != nullptr; }, 20000), "the scan finishes (" + juce::String (juce::roundToInt (p.library->status().milliseconds)) + " ms)");
+        const auto index = p.library->index();
+        if (index == nullptr || index->size() == 0)
+        {
+            std::cout << "  SKIP  no Ableton library on this Mac\n";
+            return;
+        }
+        check (index->drums() > 0 && index->drums() < index->size(), juce::String ((int) index->drums()) + " drums among " + juce::String ((int) index->size()) + " samples");
+        check (Library::cacheFile().existsAsFile(), "the cache is written");
+        waitFor ([&] { return p.padSource (0).status == Status::loaded; }, 5000);
+        const std::array<Role, numPads> expected { Role::kick, Role::snare, Role::clap, Role::closedHat, Role::openHat, Role::tom, Role::tom, Role::crash };
+        bool sorted = true;
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            const auto* info = index->find (p.padSource (pad).path.toStdString());
+            sorted = sorted && info != nullptr && info->classification.role == expected[(size_t) pad];
+        }
+        check (sorted, "the default kit's samples are found, each in its pad's role");
+        const auto before = p.library->version();
+        p.library->rescan();
+        check (waitFor ([&] { return p.library->version() != before; }, 20000), "a rescan finishes (" + juce::String (juce::roundToInt (p.library->status().milliseconds)) + " ms, from the cache)");
+    }
+
     void testEditor (const Files& f)
     {
         std::cout << "6. Editor\n";
@@ -371,6 +401,7 @@ int main()
         testRealtime (files);
         testDefaultKit();
         testEditor (files);
+        testLibrary();
     }
     std::cout << (failures == 0 ? "\nDrumChimpHost: all passed\n" : "\n*** DrumChimpHost: " + std::to_string (failures) + " failure(s)\n");
     return failures == 0 ? 0 : 1;

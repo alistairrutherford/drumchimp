@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="DchpPj" name="DrumChimp" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.2.0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.3.0"
               companyName="Alistair Rutherford" companyWebsite="https://github.com/alistairrutherford/drumchimp"
               bundleIdentifier="com.alistairrutherford.drumchimp"
               pluginFormats="buildVST3,buildStandalone" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn,pluginProducesMidiOut"
@@ -22,6 +22,8 @@
       <GROUP id="dcGrp1" name="core/library">
         <FILE id="dcF011" name="AudioHeader.h" compile="0" resource="0" file="Source/core/library/AudioHeader.h"/>
         <FILE id="dcF012" name="LibraryRoots.h" compile="0" resource="0" file="Source/core/library/LibraryRoots.h"/>
+        <FILE id="dcF013" name="Classifier.h" compile="0" resource="0" file="Source/core/library/Classifier.h"/>
+        <FILE id="dcF014" name="LibraryIndex.h" compile="0" resource="0" file="Source/core/library/LibraryIndex.h"/>
       </GROUP>
       <GROUP id="dcGrp2" name="core/midiio">
         <FILE id="dcF021" name="MidiFile.h" compile="0" resource="0" file="Source/core/midiio/MidiFile.h"/>
@@ -33,6 +35,8 @@
         <FILE id="dcF034" name="Parameters.cpp" compile="1" resource="0" file="Source/plugin/Parameters.cpp"/>
         <FILE id="dcF035" name="SampleLoader.h" compile="0" resource="0" file="Source/plugin/SampleLoader.h"/>
         <FILE id="dcF036" name="SampleLoader.cpp" compile="1" resource="0" file="Source/plugin/SampleLoader.cpp"/>
+        <FILE id="dcF037" name="Library.h" compile="0" resource="0" file="Source/plugin/Library.h"/>
+        <FILE id="dcF038" name="Library.cpp" compile="1" resource="0" file="Source/plugin/Library.cpp"/>
       </GROUP>
       <GROUP id="dcGrp4" name="ui">
         <FILE id="dcF041" name="DrumChimpEditor.h" compile="0" resource="0" file="Source/ui/DrumChimpEditor.h"/>
