@@ -56,7 +56,7 @@ namespace
     void testStyles (const std::vector<Style>& all)
     {
         std::cout << "Styles\n";
-        check (all.size() == factoryStyles.size() && all.size() >= 10, std::to_string (all.size()) + " factory styles parse");
+        check (all.size() == factoryStyles.size() && all.size() == 20, std::to_string (all.size()) + " factory styles parse");
         std::set<std::string> names;
         for (const auto& s : all)
             names.insert (s.name);
@@ -123,6 +123,74 @@ namespace
             }
         }
         check (house, "House: the kick on every beat");
+
+        // The written groove, exactly: at Complexity 0, Density 50%, no humanise and no fills,
+        // each pad plays exactly the X, x and r steps of the lanes that land on it (and, for a
+        // crash = one style, the crash on the first beat).
+        for (const auto& style : all)
+        {
+            GeneratorSettings exact;
+            exact.complexity = 0.0f;
+            exact.density = 0.5f;
+            exact.humanise = 0.0f;
+            exact.fillEvery = 0;
+            exact.bars = 2;
+            bool same = true;
+            for (int seed = 1; seed <= 20; ++seed)
+            {
+                exact.seed = (uint64_t) seed;
+                const auto p = generatePattern (style, exact, defaultPadRoles);
+                std::array<std::array<bool, maxPatternSteps>, numPads> want {};
+                for (const auto& lane : style.lanes)
+                {
+                    const int laneBars = (int) lane.steps.size() / style.grid;
+                    for (const int pad : generator::padsFor (lane.role, defaultPadRoles))
+                        for (int s = 0; s < p.steps(); ++s)
+                        {
+                            const char c = lane.steps[(size_t) (((s / style.grid) % laneBars) * style.grid + s % style.grid)];
+                            want[(size_t) pad][(size_t) s] = want[(size_t) pad][(size_t) s] || c == 'X' || c == 'x' || c == 'r';
+                        }
+                }
+                if (style.crashOnOne)                  // and the crash on the pattern's first beat
+                    for (const int pad : generator::padsFor ("crash", defaultPadRoles))
+                        want[(size_t) pad][0] = true;
+                for (int pad = 0; pad < numPads; ++pad)
+                    for (int s = 0; s < p.steps(); ++s)
+                        same = same && (p.lanes[(size_t) pad][(size_t) s].velocity > 0) == want[(size_t) pad][(size_t) s];
+            }
+            check (same, style.name + ": at Complexity 0 it plays its groove exactly as written");
+        }
+
+        GeneratorSettings g2;
+        g2.density = 0.5f;
+        g2.fillEvery = 0;
+        bool disco = true, dembow = true, jazz = true, bossa = true;
+        for (int seed = 1; seed <= 100; ++seed)
+        {
+            g2.seed = (uint64_t) seed;
+            g2.complexity = (float) (seed % 3) * 0.5f;
+            const auto d = generatePattern (named (all, "Disco"), g2, defaultPadRoles);
+            const auto dem = generatePattern (named (all, "Dembow"), g2, defaultPadRoles);
+            const auto j = generatePattern (named (all, "Jazz"), g2, defaultPadRoles);
+            const auto b = generatePattern (named (all, "Bossa Nova"), g2, defaultPadRoles);
+            for (int bar = 0; bar < 4; ++bar)
+            {
+                for (const int s : { 2, 6, 10, 14 })
+                    disco = disco && d.lanes[4][(size_t) (bar * 16 + s)].velocity > 0;
+                for (const int s : { 3, 6, 11, 14 })
+                    dembow = dembow && dem.lanes[1][(size_t) (bar * 16 + s)].velocity > 0;
+                for (const int s : { 0, 3, 6, 9 })
+                    jazz = jazz && j.lanes[3][(size_t) (bar * 12 + s)].velocity > 0;     // the ride, on the hats with no ride pad
+                const std::vector<int> clave = bar % 2 == 0 ? std::vector<int> { 0, 3, 6, 10, 13 } : std::vector<int> { 2, 5, 10 };
+                for (const int s : clave)
+                    bossa = bossa && b.lanes[1][(size_t) (bar * 16 + s)].velocity > 0;   // the rim, on the snare with no rim pad
+            }
+            jazz = jazz && j.stepsPerBar == 12 && j.steps() == 48;
+        }
+        check (disco, "Disco: open hats on every off-beat");
+        check (dembow, "Dembow: the snare on 3, 6, 11 and 14");
+        check (jazz, "Jazz: a 12-step (triplet) grid, the ride on every beat");
+        check (bossa, "Bossa Nova: the two-bar clave on the rim");
         check (rock, "Rock: the snare on 2 and 4");
         check (reggae, "Reggae: one drop, the kick on 3 and never on 1");
     }
@@ -297,6 +365,15 @@ namespace
         double at = -1.0;
         pattern::forEachEvent (one, 0.0, 4.0, 0.66, 120.0, [&] (double beat, int, uint8_t, bool on) { if (on) at = beat; });
         check (std::abs (at - (0.25 + 0.32 * 0.25)) < 1.0e-9, "Swing 66%: the second sixteenth moves a third of a step later");
+
+        Pattern triplets;
+        triplets.stepsPerBar = 12;
+        triplets.lanes[0][1].velocity = 100;
+        triplets.lanes[0][5].velocity = 100;
+        std::vector<double> tripletBeats;
+        pattern::forEachEvent (triplets, 0.0, 4.0, 0.66, 120.0, [&] (double beat, int, uint8_t, bool on) { if (on) tripletBeats.push_back (beat); });
+        check (tripletBeats.size() == 2 && std::abs (tripletBeats[0] - 1.0 / 3.0) < 1.0e-9 && std::abs (tripletBeats[1] - 5.0 / 3.0) < 1.0e-9,
+               "a 12-step grid plays triplet eighths, and Swing leaves it alone");
 
         one.lanes[0][1] = {};
         one.lanes[0][0] = { 100, 1, -10.0f };     // 10 ms early, at 120 BPM: 0.02 beats before the loop

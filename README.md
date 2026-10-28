@@ -10,8 +10,9 @@ set its velocity.
 - **Into Live:** the pattern records on another track through *MIDI From*, every note within a
   sample of its beat, checked by the Live tests. *Drag MIDI* drops it on a clip slot. If a
   dragged clip and the generator both play, the status line says to set Source to *MIDI In*.
-- **Patterns:** ten styles (Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass,
-  Breakbeat, Reggae). Set Bars, Density, Complexity, Swing, Humanise, Ghost notes and Fill.
+- **Patterns:** twenty styles: Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass,
+  Breakbeat, Reggae, Disco, Shuffle, Jazz, Bossa Nova, Afrobeat, 2-Step, Dembow, Dubstep, Motown,
+  Punk. At Complexity 0 each plays its groove exactly as written; raise it for variations. Set Bars, Density, Complexity, Swing, Humanise, Ghost notes and Fill.
   Generate makes a new pattern; changing a setting remakes this one.
 - **Step grid:** click a step to edit it, and lock a lane to keep it.
 - **Playback and MIDI:** with Source on *Generator*, the pattern plays the pads in time with

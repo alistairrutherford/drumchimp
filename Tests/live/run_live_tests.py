@@ -32,7 +32,8 @@ PREFIX = "DC test "
 # DrumChimp's choice lists, in order (Source/plugin/Parameters.cpp). Live shows no value items for a
 # VST3 plug-in's choices, so a choice is set by its normalised position and checked by its text.
 CHOICES = {
-    "Style": ["Rock", "Pop", "Funk", "Hip-Hop", "Trap", "House", "Techno", "Drum & Bass", "Breakbeat", "Reggae"],
+    "Style": ["Rock", "Pop", "Funk", "Hip-Hop", "Trap", "House", "Techno", "Drum & Bass", "Breakbeat", "Reggae",
+              "Disco", "Shuffle", "Jazz", "Bossa Nova", "Afrobeat", "2-Step", "Dembow", "Dubstep", "Motown", "Punk"],
     "Bars": ["1", "2", "4", "8"],
     "Fill": ["Off", "Every 2 bars", "Every 4 bars", "Every 8 bars"],
     "Source": ["Generator", "MIDI In"],

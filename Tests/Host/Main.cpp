@@ -658,6 +658,15 @@ namespace
             out.truncate();
             juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f), out);
         }
+        // A triplet style in the grid: Tests/build/editor-jazz.png.
+        setParam (p, "style", 12.0f);                  // Jazz, a 12-step grid
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        {
+            const auto jazzPng = png.getSiblingFile ("editor-jazz.png");
+            jazzPng.deleteFile();
+            juce::FileOutputStream jazzOut (jazzPng);
+            juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f), jazzOut);
+        }
         // And with Settings open: Tests/build/settings.png.
         for (auto* child : editor->getChildren())
             if (auto* button = dynamic_cast<juce::Button*> (child->findChildWithID ("settingsButton")))

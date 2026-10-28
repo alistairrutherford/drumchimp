@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="DchpPj" name="DrumChimp" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.7.0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.8.0"
               companyName="Alistair Rutherford" companyWebsite="https://github.com/alistairrutherford/drumchimp"
               bundleIdentifier="com.alistairrutherford.drumchimp"
               pluginFormats="buildVST3,buildStandalone" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn,pluginProducesMidiOut"

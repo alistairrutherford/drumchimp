@@ -253,9 +253,14 @@ or 8 bars).
 - Clicking a step in the grid toggles it. Hand edits last until the next change of setting.
   Lane locks keep a lane.
 
-**Styles (10):** Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass, Breakbeat,
-Reggae. **Next:** Shuffle/Blues, Jazz swing and Bossa nova (the 12-step grid is parsed and
-played, but no factory style uses it yet), Afrobeat, Garage/2-step, Dembow.
+**Styles (20):** Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass, Breakbeat,
+Reggae, and (added after Phase 6, on request) Disco, Shuffle, Jazz, Bossa Nova, Afrobeat, 2-Step,
+Dembow, Dubstep, Motown, Punk.
+- **Triplet grid:** Shuffle and Jazz use the 12-step triplet grid.
+- **Two-bar lane:** Bossa Nova's rim plays a two-bar clave.
+- **Each style as a preset:** at Complexity 0 and Density 50% or more, a style plays its groove
+  exactly as written (plus the opening crash for `crash = one` styles). Raising Complexity adds
+  the variations.
 
 **Playback:** the pattern reaches the audio thread whole, through `Handoff`. It loops from the
 song's bar 1. Swing delays the second sixteenth of each eighth. Every event goes on the first
@@ -670,6 +675,22 @@ UI and hardening.
   - **Notarisation** needs a *Developer ID Application* certificate. This Mac has only *Apple
     Development*, so builds stay ad-hoc signed, which is fine for this Mac.
   - The editor's new pieces haven't been seen in Live: Live still runs the Phase 4 build.
+
+### More styles (2026-10-28, after Phase 6)
+
+The Style pull-down has 20 styles. The ten new ones are added at the end, so sets saved with the
+first ten keep theirs. Live automation of Style stores a normalised value, though, so a Style
+automation lane recorded before this change would now point at a different style.
+
+- **Tests** (`test_pattern`), all passing:
+  - every one of the 20 keeps its anchors in every bar;
+  - every one plays its written groove exactly at Complexity 0;
+  - named checks: Disco's off-beat open hats, Dembow's snare on 3, 6, 11 and 14, Jazz's 12-step
+    grid with the ride on every beat, Bossa Nova's two-bar clave;
+  - a 12-step grid plays triplet eighths, and Swing leaves it alone.
+- **Editor:** a picture of Jazz in the step grid (`Tests/build/editor-jazz.png`) shows 12 steps a
+  bar with beat lines every 3.
+- **Checks:** `pluginval` strictness 10 passes. The Live tests' style list now has all 20.
 
 **Next:** Phase 7, the optional extras: Send to Clip (route C), curated kits from Ableton's Drum
 Rack presets, an audio-feature fallback for the classifier, more styles, multi-out, and 3/4 and
