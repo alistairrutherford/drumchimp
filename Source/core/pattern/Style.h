@@ -3,7 +3,9 @@
 //
 //   name     = House
 //   tempo    = 124              the style's usual BPM (shown; the host sets the tempo)
-//   grid     = 16               steps per bar
+//   meter    = 4/4              4/4 (the default), 3/4 or 6/8
+//   grid     = 16               steps per bar: 4/4 has 16 (sixteenths) or 12 (triplet eighths);
+//                               3/4 and 6/8 have 12 sixteenths, felt in 3 beats or in 2 (dotted)
 //   swing    = 54               % (50 straight … 75): the default for the Swing knob
 //   families = 909 808 707      kit families Randomise leans to for this style
 //   fill     = snare            the fill: none, toms or snare
@@ -39,6 +41,16 @@ namespace drumchimp
 
         std::string name;
         int grid = 16;
+        int numerator = 4, denominator = 4;   // the meter
+
+        // Quarter-note beats in a bar (4/4: 4, 3/4 and 6/8: 3), and steps in a felt beat (a
+        // quarter, a triplet quarter, or 6/8's dotted quarter): accents, fills and grid lines.
+        double beatsPerBar() const noexcept { return numerator * 4.0 / denominator; }
+        int stepsPerBeat() const noexcept
+        {
+            if (numerator == 6 && denominator == 8) return grid / 2;
+            return (int) (grid / beatsPerBar());
+        }
         double tempo = 120.0;
         double swing = 0.5;               // 0.5 straight … 0.75
         std::vector<std::string> families, extras;
@@ -101,6 +113,13 @@ namespace drumchimp
             {
                 if (key == "name") out.name = value;
                 else if (key == "grid") out.grid = std::stoi (value);
+                else if (key == "meter")
+                {
+                    if (value == "4/4") { out.numerator = 4; out.denominator = 4; }
+                    else if (value == "3/4") { out.numerator = 3; out.denominator = 4; }
+                    else if (value == "6/8") { out.numerator = 6; out.denominator = 8; }
+                    else { error = "line " + std::to_string (lineNumber) + ": meter is 4/4, 3/4 or 6/8"; return false; }
+                }
                 else if (key == "tempo") out.tempo = std::stod (value);
                 else if (key == "swing") out.swing = std::stod (value) / 100.0;
                 else if (key == "families") out.families = words (value);
@@ -144,6 +163,7 @@ namespace drumchimp
 
         if (out.name.empty()) { error = "the style has no name"; return false; }
         if (out.grid != 12 && out.grid != 16) { error = "grid is 12 or 16"; return false; }
+        if (out.numerator != 4 && out.grid != 12) { error = "3/4 and 6/8 have a grid of 12 (sixteenths)"; return false; }
         if (out.swing < 0.5 || out.swing > 0.75) { error = "swing is 50 to 75"; return false; }
         if (out.lanes.empty()) { error = "the style has no lanes"; return false; }
         for (const auto& lane : out.lanes)

@@ -260,7 +260,7 @@ namespace drumchimp
             return;
         const float w = (float) cells.getWidth() / (float) steps;
         const int rowHeight = cells.getHeight() / numPads;
-        const int beat = pattern.stepsPerBar / 4;
+        const int beat = std::max (1, pattern.stepsPerBeat);
 
         // Bar numbers along the top; beats and bars as lines.
         g.setFont (font (11.0f));
@@ -425,6 +425,7 @@ namespace drumchimp
         const auto status = processor.library->status();
         juce::String text = status.scanning ? "Scanning..." : "Scanned in " + juce::String (juce::roundToInt (status.milliseconds)) + " ms.";
         text << " Places come from Live's own library settings (the Core Library, your User Library, Places) and folders added here.";
+        text << " " << (int) status.racks << " of Ableton's Drum Rack kits can be played.";
         if (status.protectedFiles > 0)
             text << "\n" << (int) status.protectedFiles << " samples in your installed Ableton Packs are protected: only Live can play them, "
                  << "so DrumChimp leaves them out.";
@@ -638,7 +639,14 @@ namespace drumchimp
         randomise.onClick = [this] { processor.randomiseKit(); };
         undo.onClick = [this] { processor.undoKit(); };
         redo.onClick = [this] { processor.redoKit(); };
-        kits.setTooltip ("Save this kit (samples, roles and sounds) or load a saved one");
+        kits.setTooltip ("Save this kit (samples, roles and sounds), load a saved one, or load one of Ableton's kits");
+        kitSource.addItem ("From library", 1);
+        kitSource.addItem ("From Ableton kits", 2);
+        kitSource.setTooltip ("Where Randomise takes a kit from: your library (sorted by role, matched by family), "
+                              "or Ableton's own Drum Rack kits (the Core Library's, mapped onto the pads)");
+        kitSource.setSelectedId (p.kitsFromRacks() ? 2 : 1, juce::dontSendNotification);
+        kitSource.onChange = [this] { processor.setKitsFromRacks (kitSource.getSelectedId() == 2); };
+        content.addAndMakeVisible (kitSource);
         kits.onClick = [this] { showKitsMenu(); };
         for (auto* b : { &randomise, &undo, &redo, &kits })
             content.addAndMakeVisible (*b);
@@ -813,8 +821,11 @@ namespace drumchimp
         clearButton.setEnabled (s.status != Status::empty);
         undo.setEnabled (processor.canUndo());
         redo.setEnabled (processor.canRedo());
-        const auto family = processor.lastFamily();
-        familyLabel.setText (family.isEmpty() ? juce::String() : "Family: " + family, juce::dontSendNotification);
+        const auto family = processor.lastFamily(), rack = processor.lastRack();
+        familyLabel.setText (rack.isNotEmpty() ? "Kit: " + rack : family.isEmpty() ? juce::String() : "Family: " + family, juce::dontSendNotification);
+        kitSource.setSelectedId (processor.kitsFromRacks() ? 2 : 1, juce::dontSendNotification);
+        character.setEnabled (! processor.kitsFromRacks());
+        characterLabel.setEnabled (! processor.kitsFromRacks());
     }
 
     void DrumChimpEditor::chooseSample()
@@ -835,6 +846,22 @@ namespace drumchimp
     {
         juce::PopupMenu menu;
         menu.addItem ("Save kit...", [this] { saveKit(); });
+
+        // Ableton's Drum Rack kits, by folder.
+        juce::PopupMenu ableton;
+        if (const auto index = processor.library->index(); index != nullptr && ! index->racks().empty())
+        {
+            const auto& racks = index->racks();
+            for (size_t i = 0; i < racks.size();)
+            {
+                juce::PopupMenu group;
+                const auto name = racks[i].group;
+                for (; i < racks.size() && racks[i].group == name; ++i)
+                    group.addItem (juce::String (racks[i].name), [this, which = (int) i] { processor.loadRack (which); browser.refresh(); });
+                ableton.addSubMenu (juce::String (name), group);
+            }
+        }
+        menu.addSubMenu ("Ableton kits", ableton, ableton.containsAnyActiveItems());
         const auto presets = processor.kitPresets();
         menu.addSeparator();
         if (presets.isEmpty())
@@ -930,6 +957,15 @@ namespace drumchimp
                             juce::dontSendNotification);
             status.setColour (juce::Label::textColourId, warning);
         }
+        else if (const auto host = processor.hostTimeSignature(), mine = processor.patternTimeSignature();
+                 host != 0 && host != mine)
+        {
+            const auto meter = [] (int m) { return juce::String (m / 100) + "/" + juce::String (m % 100); };
+            status.setText ("Live's set is in " + meter (host) + ", and " + juce::String (processor.currentStyle().name) + " is in " + meter (mine)
+                                + ": set Live's time signature to " + meter (mine) + " so the bars line up",
+                            juce::dontSendNotification);
+            status.setColour (juce::Label::textColourId, warning);
+        }
         else
         {
             status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
@@ -996,9 +1032,11 @@ namespace drumchimp
         undo.setBounds (kitBar.removeFromLeft (60));
         kitBar.removeFromLeft (4);
         redo.setBounds (kitBar.removeFromLeft (60));
-        kitBar.removeFromLeft (16);
-        characterLabel.setBounds (kitBar.removeFromLeft (64));
-        character.setBounds (kitBar.removeFromLeft (150));
+        kitBar.removeFromLeft (12);
+        kitSource.setBounds (kitBar.removeFromLeft (160));
+        kitBar.removeFromLeft (8);
+        characterLabel.setBounds (kitBar.removeFromLeft (60));
+        character.setBounds (kitBar.removeFromLeft (120));
         kitBar.removeFromLeft (12);
         kits.setBounds (kitBar.removeFromRight (80));
         familyLabel.setBounds (kitBar);

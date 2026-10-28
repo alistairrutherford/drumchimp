@@ -1,5 +1,6 @@
-// The factory styles (PLAN.md §3.4): twenty, in the text format of Style.h. Each lane is written
-// a beat at a time (4 sixteenths, or 3 triplet eighths on a 12-step grid). At Complexity 0 and
+// The factory styles (PLAN.md §3.4): twenty-four, in the text format of Style.h. Each lane is
+// written a felt beat at a time (4 sixteenths, 3 triplet eighths on a 12-step 4/4 grid, or 6
+// sixteenths for 6/8's dotted quarter). At Complexity 0 and
 // Density 50% or more a style plays exactly its X, x and r steps: its groove as written. The
 // order is the Style parameter's: new styles go at the end, so saved sets keep theirs.
 #pragma once
@@ -8,7 +9,7 @@
 
 namespace drumchimp
 {
-    constexpr std::array<const char*, 20> factoryStyles {
+    constexpr std::array<const char*, 24> factoryStyles {
 
 R"(name      = Rock
 tempo     = 110
@@ -265,6 +266,62 @@ crash     = one
 kick      = X... ..x. X.x. ....
 snare     = .... X... .... X...
 ride      = x.x. x.x. x.x. x.x.
+)",
+
+R"(name      = Waltz
+tempo     = 150
+meter     = 3/4
+grid      = 12
+swing     = 50
+families  = acoustic session brush vinyl
+fill      = toms
+crash     = one
+kick      = X... .... ....
+snare     = .... x... x...
+closedHat = x.x. x.x. x.x.
+)",
+
+R"(name      = Jazz Waltz
+tempo     = 160
+meter     = 3/4
+grid      = 12
+swing     = 62
+families  = acoustic session brush jazz
+fill      = snare
+crash     = fills
+ride      = X... X.x. X...
+closedHat = .... x... x...
+kick      = g... .... ..o.
+snare     = ..g. .... o..g
+)",
+
+R"(name      = 6/8 Ballad
+tempo     = 100
+meter     = 6/8
+grid      = 12
+swing     = 50
+families  = acoustic acoustified session kindified
+fill      = toms
+crash     = one
+kick      = X..... ..o...
+snare     = ...... X.....
+closedHat = x.x.x. x.x.x.
+openHat   = ...... ....o.
+)",
+
+R"(name      = Afro 6/8
+tempo     = 110
+meter     = 6/8
+grid      = 12
+swing     = 50
+families  = acoustic vinyl sp
+fill      = toms
+crash     = fills
+kick      = X..... X.....
+perc      = x...x. ..x.x. | ..x... x...x.
+rim       = ....o. ....o.
+tom       = ..o... ...o.o
+closedHat = ..x... ..x...
 )",
 
     };

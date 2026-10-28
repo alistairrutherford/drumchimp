@@ -3,8 +3,9 @@
 //
 //   Header      Source (Generator / MIDI In), Note map (GM / Chromatic), and the drag handle:
 //               the pattern as a .mid to drop on a clip slot
-//   Kit bar     Randomise kit, Undo, Redo, Character (Matched … Wild), the family Randomise chose,
-//               and Kits (save the kit as a preset, load one)
+//   Kit bar     Randomise kit, Undo, Redo, where Randomise takes kits from (your library, or
+//               Ableton's Drum Rack kits), Character (Matched … Wild), the family or kit chosen,
+//               and Kits (save the kit as a preset, load one, or load an Ableton kit by name)
 //   Pads        eight pads with their role and sample, a lock and a dice. Click to select and play
 //               one; drop a sample on one (from Live's browser, Finder or DrumChimp's browser) to
 //               load it. A pad lights when it plays.
@@ -222,6 +223,7 @@ namespace drumchimp
 
         juce::TextButton randomise { "Randomise kit" }, undo { "Undo" }, redo { "Redo" }, kits { "Kits" };
         juce::Slider character { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+        juce::ComboBox kitSource;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> characterAttachment;
         juce::Label characterLabel, familyLabel;
 

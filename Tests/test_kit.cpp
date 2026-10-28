@@ -4,7 +4,7 @@
 // range, nothing repeats, a re-roll changes the pad, the same seed gives the same kit, undo and
 // redo, and finding a missing sample again.
 #include "TestUtil.h"
-#include "core/kit/KitBuilder.h"
+#include "core/kit/DrumRack.h"
 
 using namespace drumchimp;
 using testutil::check;
@@ -242,11 +242,72 @@ namespace
     }
 }
 
+namespace
+{
+    void testDrumRacks()
+    {
+        std::cout << "Drum Rack presets\n";
+        // Three pads as Live writes them (trimmed): notes stored as 128 − note, the sample's
+        // RelativePath then Path, other file refs (the preset itself) that aren't audio.
+        const std::string xml = R"(<Ableton><GroupDevicePreset><Device><DrumGroupDevice>
+            <FileRef><RelativePath Value="Racks/Drum Racks/X.adg" /><Path Value="/build/X.adg" /></FileRef>
+            <DrumBranchPreset Id="0"><ZoneSettings><ReceivingNote Value="92" /></ZoneSettings>
+              <FileRef><RelativePath Value="Drums/Kick Warm.adg" /></FileRef>
+              <SampleRef><FileRef><RelativePath Value="Samples/One Shots/Drums/Kick/Kick Remo.aif" /><Path Value="/build/Core Library/Samples/One Shots/Drums/Kick/Kick Remo.aif" /></FileRef></SampleRef>
+            </DrumBranchPreset>
+            <DrumBranchPreset Id="1"><ZoneSettings><ReceivingNote Value="90" /></ZoneSettings>
+              <SampleRef><FileRef><RelativePath Value="Samples/One Shots/Drums/Snare/Snare R&amp;B.wav" /><Path Value="" /></FileRef></SampleRef>
+            </DrumBranchPreset>
+            <DrumBranchPreset Id="2"><ZoneSettings><ReceivingNote Value="86" /></ZoneSettings>
+              <SampleRef><FileRef><RelativePath Value="" /></FileRef></SampleRef>
+            </DrumBranchPreset>
+        </DrumGroupDevice></Device></GroupDevicePreset></Ableton>)";
+        const auto pads = parseDrumRack (xml);
+        check (pads.size() == 2, "two pads with samples (the third has none): " + std::to_string (pads.size()));
+        if (pads.size() == 2)
+        {
+            check (pads[0].note == 36 && pads[0].relativePath == "Samples/One Shots/Drums/Kick/Kick Remo.aif"
+                       && pads[0].path == "/build/Core Library/Samples/One Shots/Drums/Kick/Kick Remo.aif",
+                   "the kick on C1 (stored as 92), its relative and absolute paths, not the preset's own .adg");
+            check (pads[1].note == 38 && pads[1].relativePath == "Samples/One Shots/Drums/Snare/Snare R&B.wav", "the snare on D1, entities unescaped");
+        }
+        check (parseDrumRack ("<Ableton/>").empty() && parseDrumRack ("<DrumBranchPreset><ReceivingNote Value=\"92\" />").empty(), "nothing, or a cut-off file: no pads");
+
+        // A rack onto the pads: roles, notes, tom ranges, locks.
+        std::vector<SampleInfo> lib {
+            make ("Core", "Kick A", Role::kick, {}), make ("Core", "Kick B", Role::kick, {}), make ("Core", "Snare A", Role::snare, {}),
+            make ("Core", "Hat Closed", Role::closedHat, {}), make ("Core", "Hat Open", Role::openHat, {}),
+            make ("Core", "Tom Lo", Role::tom, {}, TomRange::low), make ("Core", "Tom Hi", Role::tom, {}, TomRange::high),
+            make ("Core", "Crash", Role::crash, {}),
+        };
+        const LibraryIndex index (std::move (lib));
+        const auto path = [] (const char* name) { return "/lib/Core/Drums/" + std::string (name) + ".wav"; };
+        DrumRack rack;
+        rack.name = "Test Kit";
+        for (const auto& [note, name] : std::vector<std::pair<int, const char*>> { { 35, "Kick B" }, { 36, "Kick A" }, { 38, "Snare A" }, { 42, "Hat Closed" },
+                                                                                 { 46, "Hat Open" }, { 45, "Tom Hi" }, { 41, "Tom Lo" }, { 49, "Crash" } })
+            rack.pads.push_back ({ note, "", "", path (name) });
+        KitPaths current;
+        current[2] = "/old/Clap.wav";
+        std::array<bool, numPads> locked {};
+        const auto kit = rackKit (rack, index, defaultPadRoles, current, locked);
+        check (kit[0] == path ("Kick A"), "the kick nearest C1 (36, not 35)");
+        check (kit[1] == path ("Snare A") && kit[3] == path ("Hat Closed") && kit[4] == path ("Hat Open") && kit[7] == path ("Crash"), "snare, hats and crash by role");
+        check (kit[5] == path ("Tom Lo") && kit[6] == path ("Tom Hi"), "low and high toms by their range, not their notes");
+        check (kit[2] == "/old/Clap.wav", "a role the rack hasn't got (clap) keeps the pad's sample");
+        locked[0] = true;
+        current[0] = path ("Kick A");
+        const auto lockedKit = rackKit (rack, index, defaultPadRoles, current, locked);
+        check (lockedKit[0] == path ("Kick A"), "a locked pad stays");
+    }
+}
+
 int main()
 {
     testBuild();
     testLocksAndDice();
     testHistory();
     testRelocate();
+    testDrumRacks();
     return testutil::finish ("test_kit");
 }

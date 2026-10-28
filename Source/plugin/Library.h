@@ -3,7 +3,8 @@
 // (LibraryRoots.h), scans and classifies them (LibraryIndex.h), and keeps the header cache in
 // ~/Library/Application Support/DrumChimp/library-cache.tsv, so later starts read almost no files.
 //
-//   index()    the latest finished index (null until the first scan ends); any thread
+//   index()    the latest finished index (null until the first scan ends), with the Drum Rack
+//              presets DrumChimp can play (index->racks()); any thread
 //   status()   for the editor
 //   rescan()   scan again (Settings)
 //   addFolder(), removeFolder(), extraFolders()
@@ -29,6 +30,7 @@ namespace drumchimp
             bool scanning = false;
             size_t samples = 0, drums = 0, roots = 0, protectedFiles = 0;   // protected: Ableton Pack samples, which only Live can play
             double milliseconds = 0.0;
+            size_t racks = 0;             // Drum Rack presets usable as kits
         };
 
         std::shared_ptr<const LibraryIndex> index() const;
@@ -47,6 +49,7 @@ namespace drumchimp
 
     private:
         void run() override;
+        std::vector<DrumRack> findRacks (const LibraryIndex& index, const std::vector<LibraryRoot>& roots);
 
         mutable juce::CriticalSection lock;
         std::shared_ptr<const LibraryIndex> current;

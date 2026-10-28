@@ -15,6 +15,9 @@ puts the tempo back. It records into the Arrangement from beat 0 on its own trac
                 the rest on the grid
   3. State      a duplicate of the DrumChimp track plays exactly the same pattern: the pattern is
                 saved with the device, not made again (a new instance would have a new seed)
+  4. 3/4        with Live's set in 3/4, Waltz: every note on its sixteenth, the kick on the 1 of
+                every 3-beat bar and nowhere else, the snare on 2 and 3 (the set goes back to its
+                own time signature after)
 
   python3 Tests/live/run_live_tests.py
 """
@@ -33,7 +36,8 @@ PREFIX = "DC test "
 # VST3 plug-in's choices, so a choice is set by its normalised position and checked by its text.
 CHOICES = {
     "Style": ["Rock", "Pop", "Funk", "Hip-Hop", "Trap", "House", "Techno", "Drum & Bass", "Breakbeat", "Reggae",
-              "Disco", "Shuffle", "Jazz", "Bossa Nova", "Afrobeat", "2-Step", "Dembow", "Dubstep", "Motown", "Punk"],
+              "Disco", "Shuffle", "Jazz", "Bossa Nova", "Afrobeat", "2-Step", "Dembow", "Dubstep", "Motown", "Punk",
+              "Waltz", "Jazz Waltz", "6/8 Ballad", "Afro 6/8"],
     "Bars": ["1", "2", "4", "8"],
     "Fill": ["Off", "Every 2 bars", "Every 4 bars", "Every 8 bars"],
     "Source": ["Generator", "MIDI In"],
@@ -165,10 +169,27 @@ def test_state(live, source, rec):
     check(a == b and len(a) > 20, "the copy's notes are the original's (%d and %d)" % (len(a), len(b)))
 
 
+def test_three_four(live, source, rec):
+    print("4. 3/4: Waltz in a 3/4 set")
+    live.call("set_song_properties", signature_numerator=3, signature_denominator=4)
+    shown = set_param(live, source, "Style", "Waltz")
+    set_param(live, source, "Humanise", 0.0)
+    set_param(live, source, "Fill", "Off")
+    clear(live, [rec])
+    notes = [n for n in record(live, 12, [rec])[0] if n["start_time"] < 12.0 - 1e-6]
+    off_grid = [n for n in notes if abs(n["start_time"] * 4 - round(n["start_time"] * 4)) / 4 > TOLERANCE]
+    kicks = sorted({round(n["start_time"], 3) for n in notes if n["pitch"] == 36})
+    snares = {round(n["start_time"], 3) for n in notes if n["pitch"] == 38}
+    check(shown == "Waltz" and notes and not off_grid, "%d notes, every one on its sixteenth" % len(notes))
+    check(kicks == [0.0, 3.0, 6.0, 9.0], "the kick on every bar's 1 and nowhere else: %s" % kicks)
+    check(snares >= {1.0, 2.0, 4.0, 5.0, 7.0, 8.0, 10.0, 11.0}, "the snare on 2 and 3 of every bar")
+
+
 def main():
     live = LiveClient().connect()
     state = live.call("get_state", include_devices=False)
     tempo = state["tempo"]
+    signature = state["signature"]
     armed = [t["index"] for t in state["tracks"] if t.get("arm")]
     for t in armed:
         live.call("set_track", track=t, arm=False)
@@ -186,6 +207,7 @@ def main():
         test_routing(live, source, rec)
         test_swing(live, source, rec)
         test_state(live, index_of(live, PREFIX + "DrumChimp"), rec)
+        test_three_four(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
     finally:
         live.call("stop_transport")
         for t in sorted((t["index"] for t in tracks(live) if t["name"].startswith(PREFIX)), reverse=True):
@@ -195,6 +217,7 @@ def main():
             if t in names:
                 live.call("set_track", track=t, arm=True)
         live.call("set_tempo", bpm=tempo)
+        live.call("set_song_properties", signature_numerator=signature[0], signature_denominator=signature[1])
     print("\n" + ("Live tests: all passed" if failures == 0 else "*** Live tests: %d failure(s)" % failures))
     return 0 if failures == 0 else 1
 

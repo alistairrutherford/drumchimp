@@ -56,7 +56,7 @@ namespace
     void testStyles (const std::vector<Style>& all)
     {
         std::cout << "Styles\n";
-        check (all.size() == factoryStyles.size() && all.size() == 20, std::to_string (all.size()) + " factory styles parse");
+        check (all.size() == factoryStyles.size() && all.size() == 24, std::to_string (all.size()) + " factory styles parse");
         std::set<std::string> names;
         for (const auto& s : all)
             names.insert (s.name);
@@ -70,6 +70,14 @@ namespace
         check (! parseStyle ("kick = X...X...X...X...", s, error) && error.find ("no name") != std::string::npos, "a style needs a name");
         check (parseStyle ("name = Two bars\nkick = X... .... X... .... | X... X... X... X...\n", s, error) && s.lanes[0].steps.size() == 32,
                "a lane may be several bars");
+        check (parseStyle ("name = W\nmeter = 3/4\ngrid = 12\nkick = X... .... ....", s, error) && s.numerator == 3 && s.beatsPerBar() == 3.0
+                   && s.stepsPerBeat() == 4, "3/4: 3 beats of 4 sixteenths");
+        check (parseStyle ("name = S\nmeter = 6/8\ngrid = 12\nkick = X..... X.....", s, error) && s.denominator == 8 && s.beatsPerBar() == 3.0
+                   && s.stepsPerBeat() == 6, "6/8: felt in 2 dotted beats of 6 sixteenths");
+        check (! parseStyle ("name = W\nmeter = 3/4\nkick = X... .... .... ....", s, error) && error.find ("grid of 12") != std::string::npos,
+               "3/4 on a 16 grid is refused: " + error);
+        check (! parseStyle ("name = W\nmeter = 5/4\ngrid = 12\nkick = X... .... ....", s, error) && error.find ("meter is") != std::string::npos,
+               "an unknown meter is refused");
     }
 
     void testInvariants (const std::vector<Style>& all)
@@ -191,6 +199,42 @@ namespace
         check (dembow, "Dembow: the snare on 3, 6, 11 and 14");
         check (jazz, "Jazz: a 12-step (triplet) grid, the ride on every beat");
         check (bossa, "Bossa Nova: the two-bar clave on the rim");
+
+        // Meters.
+        GeneratorSettings m;
+        m.density = 0.5f;
+        m.fillEvery = 0;
+        m.bars = 4;
+        bool waltz = true, ballad = true, afro = true;
+        for (int seed = 1; seed <= 50; ++seed)
+        {
+            m.seed = (uint64_t) seed;
+            const auto w = generatePattern (named (all, "Waltz"), m, defaultPadRoles);
+            const auto b6 = generatePattern (named (all, "6/8 Ballad"), m, defaultPadRoles);
+            const auto a6 = generatePattern (named (all, "Afro 6/8"), m, defaultPadRoles);
+            waltz = waltz && w.numerator == 3 && w.steps() == 48 && w.lengthBeats() == 12.0 && w.stepsPerBeat == 4;
+            ballad = ballad && b6.numerator == 6 && b6.denominator == 8 && b6.stepsPerBeat == 6 && b6.lengthBeats() == 12.0;
+            for (int bar = 0; bar < 4; ++bar)
+            {
+                waltz = waltz && w.lanes[0][(size_t) (bar * 12)].velocity > 0 && w.lanes[0][(size_t) (bar * 12 + 4)].velocity == 0
+                        && w.lanes[1][(size_t) (bar * 12 + 4)].velocity > 0 && w.lanes[1][(size_t) (bar * 12 + 8)].velocity > 0;
+                ballad = ballad && b6.lanes[0][(size_t) (bar * 12)].velocity > 0 && b6.lanes[1][(size_t) (bar * 12 + 6)].velocity > 0;
+                afro = afro && a6.lanes[0][(size_t) (bar * 12)].velocity > 0 && a6.lanes[0][(size_t) (bar * 12 + 6)].velocity > 0;
+            }
+        }
+        check (waltz, "Waltz: 3/4, 12 sixteenths a bar, oom on 1, pah-pah on 2 and 3");
+        check (ballad, "6/8 Ballad: 6/8 in two dotted beats, the kick on 1, the snare on 4");
+        check (afro, "Afro 6/8: the kick on both dotted beats");
+        GeneratorSettings wf = m;
+        wf.fillEvery = 4;
+        wf.complexity = 0.3f;
+        const auto waltzFill = generatePattern (named (all, "Waltz"), wf, defaultPadRoles), waltzPlain = generatePattern (named (all, "Waltz"), m, defaultPadRoles);
+        bool lastBeat = true;
+        for (int pad = 1; pad < numPads; ++pad)
+            for (int s = 0; s < 48; ++s)
+                if (waltzFill.lanes[(size_t) pad][(size_t) s].velocity != waltzPlain.lanes[(size_t) pad][(size_t) s].velocity)
+                    lastBeat = lastBeat && (s >= 36 + 8 || (s == 0 && pad == 7));
+        check (lastBeat, "a 3/4 fill takes the last beat of the bar (4 sixteenths)");
         check (rock, "Rock: the snare on 2 and 4");
         check (reggae, "Reggae: one drop, the kick on 3 and never on 1");
     }
@@ -374,6 +418,26 @@ namespace
         pattern::forEachEvent (triplets, 0.0, 4.0, 0.66, 120.0, [&] (double beat, int, uint8_t, bool on) { if (on) tripletBeats.push_back (beat); });
         check (tripletBeats.size() == 2 && std::abs (tripletBeats[0] - 1.0 / 3.0) < 1.0e-9 && std::abs (tripletBeats[1] - 5.0 / 3.0) < 1.0e-9,
                "a 12-step grid plays triplet eighths, and Swing leaves it alone");
+
+        Pattern three;
+        three.stepsPerBar = 12;
+        three.numerator = 3;
+        three.stepsPerBeat = 4;
+        three.bars = 1;
+        three.lanes[0][0].velocity = 100;
+        three.lanes[0][1].velocity = 100;
+        std::vector<double> threeBeats;
+        pattern::forEachEvent (three, 0.0, 6.0, 0.66, 120.0, [&] (double beat, int, uint8_t, bool on) { if (on) threeBeats.push_back (beat); });
+        std::sort (threeBeats.begin(), threeBeats.end());
+        check (threeBeats.size() == 4 && std::abs (threeBeats[2] - 3.0) < 1.0e-9 && std::abs (threeBeats[1] - (0.25 + 0.32 * 0.25)) < 1.0e-9,
+               "3/4 loops every 3 beats, and its sixteenths swing");
+        const auto song34 = pattern::toMidiSong (three, 2, 120.0, 0.5, NoteMap::gm, "waltz");
+        const auto bytes34 = writeMidiFile (song34);
+        MidiSong back34;
+        std::string err34;
+        check (readMidiFile (bytes34.data(), bytes34.size(), back34, err34) && back34.numerator == 3 && back34.denominator == 4
+                   && back34.notes.size() == 4 && back34.notes[2].start == 3 * 960,
+               "MIDI: a 3/4 pattern's file says 3/4, its second loop starts on beat 3");
 
         one.lanes[0][1] = {};
         one.lanes[0][0] = { 100, 1, -10.0f };     // 10 ms early, at 120 BPM: 0.02 beats before the loop

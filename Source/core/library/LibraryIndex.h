@@ -11,7 +11,8 @@
 //                 for unchanged files, reads the header of the rest (AudioHeader.h), classifies.
 //                 Ableton's protected pack samples are left out (only Live can play them), and
 //                 counted; the cache remembers them as protected (a length of −1).
-//   LibraryIndex  the result, with the samples of each role
+//   LibraryIndex  the result, with the samples of each role, and (Phase 7) the Drum Rack presets
+//                 that can be played from it
 #pragma once
 
 #include "AudioHeader.h"
@@ -33,6 +34,20 @@ namespace drumchimp
         double seconds = 0.0;
         int64_t size = 0;
         Classification classification;
+    };
+
+    // A Drum Rack preset's pads (core/kit/DrumRack.h reads them).
+    struct RackPad
+    {
+        int note = 0;
+        std::string relativePath, path;   // as the preset has them
+        std::string resolved;             // the sample on this Mac, once found (Library.cpp)
+    };
+
+    struct DrumRack
+    {
+        std::string name, group, file;    // "Selector Kit Warm", its folder ("Selector Kits"), the .adg
+        std::vector<RackPad> pads;        // only the pads whose samples DrumChimp can play
     };
 
     struct LibraryCache
@@ -185,7 +200,10 @@ namespace drumchimp
                 return a.root != b.root ? a.root < b.root : a.relative < b.relative;
             });
             for (size_t i = 0; i < samples.size(); ++i)
+            {
                 byRole[(size_t) samples[i].classification.role].push_back (i);
+                byPath.emplace (samples[i].path, i);
+            }
         }
 
         const std::vector<SampleInfo>& all() const noexcept { return samples; }
@@ -196,13 +214,19 @@ namespace drumchimp
 
         const SampleInfo* find (const std::string& path) const noexcept
         {
-            const auto it = std::find_if (samples.begin(), samples.end(), [&] (const SampleInfo& s) { return s.path == path; });
-            return it != samples.end() ? &*it : nullptr;
+            const auto it = byPath.find (path);
+            return it != byPath.end() ? &samples[it->second] : nullptr;
         }
+
+        // Drum Rack presets whose samples are in this index (set before the index is shared).
+        const std::vector<DrumRack>& racks() const noexcept { return *rackList; }
+        void setRacks (std::shared_ptr<const std::vector<DrumRack>> r) { rackList = std::move (r); }
 
     private:
         std::vector<SampleInfo> samples;
         std::vector<LibraryRoot> roots;
         std::array<std::vector<size_t>, numRoles> byRole;
+        std::unordered_map<std::string, size_t> byPath;
+        std::shared_ptr<const std::vector<DrumRack>> rackList = std::make_shared<const std::vector<DrumRack>>();
     };
 }

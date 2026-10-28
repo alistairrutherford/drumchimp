@@ -15,7 +15,9 @@
 //   Kits       each pad has a role and a lock. Randomise and a pad's dice build kits from the
 //              library (core/kit/KitBuilder.h, Character Matched → Wild); every kit change can be
 //              undone (the last 20, for the session). Kit presets (samples, roles and sound
-//              settings) are JSON files in ~/Library/Application Support/DrumChimp/Kits. A
+//              settings) are JSON files in ~/Library/Application Support/DrumChimp/Kits. With
+//              "Ableton kits" as the source, Randomise picks one of Ableton's Drum Rack presets
+//              instead (core/kit/DrumRack.h); the Kits menu loads one by name. A
 //              missing sample is looked for in the library by name and size, and loaded from
 //              where it is now. previewSample() plays a file from the browser without a pad.
 //   State      the parameters, plus each pad's sample path and file size. A sample that is gone
@@ -23,7 +25,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "../core/kit/KitBuilder.h"
+#include "../core/kit/DrumRack.h"
 #include "../core/pattern/PatternGenerator.h"
 #include "../core/util/Handoff.h"
 #include "../core/sampler/DrumEngine.h"
@@ -89,6 +91,10 @@ namespace drumchimp
         void randomiseKit();
         void randomisePad (int pad);
         juce::String lastFamily() const { return family; }   // the family Randomise last chose, or ""
+        juce::String lastRack() const { return rackName; }   // the Ableton kit last loaded, or ""
+        bool kitsFromRacks() const { return fromRacks; }
+        void setKitsFromRacks (bool racks);
+        void loadRack (int index);        // index->racks()[index]
         bool canUndo() const { return history.canUndo(); }
         bool canRedo() const { return history.canRedo(); }
         void undoKit();
@@ -123,6 +129,9 @@ namespace drumchimp
         // Whether notes came in while the generator played, since the last call: a dragged-out clip
         // on this track with Source still on Generator plays every hit twice.
         bool takeDoubled() noexcept { return doubled.exchange (false); }
+        // The host's time signature as numerator × 100 + denominator (404 for 4/4), or 0 if unknown.
+        int hostTimeSignature() const noexcept { return hostMeter.load(); }
+        int patternTimeSignature() const noexcept { return pattern.numerator * 100 + pattern.denominator; }   // message thread
         juce::uint32 patternVersion() const noexcept { return patternChanges.load(); }
 
         struct Status
@@ -162,7 +171,9 @@ namespace drumchimp
         std::array<PadRole, numPads> roles = defaultPadRoles;
         std::array<bool, numPads> locked {};
         KitHistory history;
-        juce::String family;
+        juce::String family, rackName;
+        bool fromRacks = false;
+        void applyRack (const DrumRack& rack);
         bool stateRestored = false, defaultKitTried = false, lookForMissing = false;
         juce::uint32 libraryVersionSeen = 0;
 
@@ -188,6 +199,7 @@ namespace drumchimp
         const Pattern* lastPattern = nullptr;
         std::atomic<int> playStep { -1 };
         std::atomic<bool> doubled { false };
+        std::atomic<int> hostMeter { 0 };
 
         std::atomic<juce::uint32> pendingAuditions { 0 }, hits { 0 };
         std::atomic<bool> playing { false };

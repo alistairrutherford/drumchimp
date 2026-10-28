@@ -43,7 +43,8 @@ VST3 *MIDI From* is also in v1; Chordism and NoteCap measured that route as samp
 
 **Out of scope for v1:** Windows, AU, AAX, multi-out, time signatures other than 4/4, sample
 editing (start point and loop), audio analysis in the classifier, and loading Ableton
-Drum Rack presets as kits. The last two are candidates for Phase 7.
+Drum Rack presets as kits. The last two are candidates for Phase 7. *(Phase 7 added 3/4 and 6/8,
+and Ableton's Drum Rack kits.)*
 
 ---
 
@@ -211,6 +212,17 @@ test set.
 - **Kit presets** (*Kits* menu): the samples, roles and sound settings (level, pan, tune, decay,
   velocity, choke) as JSON in `~/Library/Application Support/DrumChimp/Kits/`. A preset can be
   loaded in any project.
+- **Ableton kits** (Phase 7, `core/kit/DrumRack.h`): the Drum Rack presets in the Core Library's
+  `Racks/Drum Racks` and the User Library's `Presets`, read during the library scan.
+  - Each pad's sample is found in the library by its relative path (or its absolute one).
+  - A rack is kept when DrumChimp can play its kick and snare: 119 here. Packs' racks use
+    protected samples, so they don't qualify.
+  - *From Ableton kits* (next to Randomise) makes Randomise pick one of them. The Kits menu
+    loads one by name, grouped by folder.
+  - A rack goes onto the pads by role, as the library sorted its samples. Each pad takes the
+    rack's sample of its role nearest the role's usual note (kick 36, snare 38, closed hat
+    42 …); toms go by their range.
+  - Locked pads stay. A role the rack hasn't got keeps the pad's sample.
 - **Style-aware kits** (Trap and Hip-Hop toward 808, Techno and House toward 909, Rock and Jazz
   toward acoustic) wait for the styles, in Phase 4.
 
@@ -692,6 +704,37 @@ automation lane recorded before this change would now point at a different style
   bar with beat lines every 3.
 - **Checks:** `pluginval` strictness 10 passes. The Live tests' style list now has all 20.
 
-**Next:** Phase 7, the optional extras: Send to Clip (route C), curated kits from Ableton's Drum
-Rack presets, an audio-feature fallback for the classifier, more styles, multi-out, and 3/4 and
-6/8.
+### Phase 7, first part (2026-10-28, Live 12.4.7): 3/4 and 6/8, and Ableton kits
+
+You chose these two from the extras (Send to Clip and multi-out are left).
+
+- **Meters:**
+  - **Format:** a style can say `meter = 3/4` or `6/8`, both on 12 sixteenths a bar. 3/4 is felt
+    in three beats of 4, and 6/8 in two dotted beats of 6. A pattern carries its meter: its
+    length, the beat lines in the step grid, accents and fills follow it, Swing applies to its
+    sixteenths, and its MIDI file says 3/4 or 6/8. The meter is saved with the set.
+  - **Meter warning:** DrumChimp reads Live's time signature, and the status line says so when
+    it differs from the style's (for example, a Waltz in a 4/4 set).
+  - **Four new styles** (24 in all): Waltz and Jazz Waltz (3/4), 6/8 Ballad and Afro 6/8.
+- **Ableton kits:** Randomise from Ableton's Drum Rack presets, or load one by name (§3.3).
+- **Tests:**
+  - **Core:** meter parsing; Waltz, 6/8 Ballad and Afro 6/8 grooves; a 3/4 fill takes the last
+    beat; 3/4 loops every 3 beats and swings; the MIDI file's meter; reading a Drum Rack (notes
+    stored as 128 − note, entities, files that aren't audio); mapping one onto pads (nearest
+    note, tom range, locks, missing roles).
+  - **Host:** Waltz plays in 3/4 with every note on its sample and the kick on every bar's 1; it
+    reads the host's 3/4, restores as 3/4, and drags out as 3/4. 119 racks are found, every pad
+    in the library and none from Packs. Five random Ableton kits load completely. Loading
+    *Selector Kit Warm* by name puts its kick on C1 and its snare on D1 and keeps a locked pad.
+    The kit source is saved with the set.
+  - **In Live** (`run_live_tests.py`, now 11 checks, on this build): the earlier routing, swing
+    and state checks, plus Waltz in a 3/4 set: every note on its sixteenth, the kick only on
+    beats 0, 3, 6 and 9, and the snare on 2 and 3. The set goes back to its own time signature
+    afterwards.
+  - `pluginval` strictness 10 passes. The editor snapshot was updated for the new *From
+    library / From Ableton kits* menu.
+- **Also:** the library index looks samples up by path in a hash map now, since racks need
+  thousands of lookups.
+
+**Left in Phase 7:** Send to Clip (route C), multi-out, and an audio-feature fallback for the
+classifier.

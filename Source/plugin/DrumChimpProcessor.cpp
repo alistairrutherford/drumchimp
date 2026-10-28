@@ -105,6 +105,8 @@ namespace drumchimp
                 isPlaying = pos->getIsPlaying();
                 position = pos->getPpqPosition();
                 tempo = pos->getBpm();
+                if (const auto sig = pos->getTimeSignature())
+                    hostMeter.store (sig->numerator * 100 + sig->denominator, std::memory_order_relaxed);
             }
         playing.store (isPlaying, std::memory_order_relaxed);
         if (tempo)
@@ -268,9 +270,47 @@ namespace drumchimp
         const auto index = library->index();
         if (index == nullptr)
             return;                       // the first scan hasn't finished
+        if (fromRacks && ! index->racks().empty())
+        {
+            // A random Ableton kit, not the one already loaded.
+            const auto& racks = index->racks();
+            auto pick = (size_t) juce::Random::getSystemRandom().nextInt ((int) racks.size());
+            if (racks.size() > 1 && juce::String (racks[pick].name) == rackName)
+                pick = (pick + 1 + (size_t) juce::Random::getSystemRandom().nextInt ((int) racks.size() - 1)) % racks.size();
+            applyRack (racks[pick]);
+            return;
+        }
         const auto result = buildKit (*index, kitRequest());
         family = result.family.rfind ("pack:", 0) == 0 ? juce::String (result.family.substr (5)) : juce::String (result.family);
+        rackName = {};
         applyKit (result.paths, true);
+    }
+
+    void DrumChimpProcessor::applyRack (const DrumRack& rack)
+    {
+        if (const auto index = library->index())
+        {
+            rackName = rack.name;
+            family = {};
+            applyKit (rackKit (rack, *index, roles, kitPaths(), locked), true);
+            ++kitChanges;
+        }
+    }
+
+    void DrumChimpProcessor::loadRack (int which)
+    {
+        if (const auto index = library->index(); index != nullptr && which >= 0 && which < (int) index->racks().size())
+            applyRack (index->racks()[(size_t) which]);
+    }
+
+    void DrumChimpProcessor::setKitsFromRacks (bool racks)
+    {
+        if (fromRacks != racks)
+        {
+            fromRacks = racks;
+            updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+            ++kitChanges;
+        }
     }
 
     void DrumChimpProcessor::randomisePad (int pad)
@@ -493,6 +533,7 @@ namespace drumchimp
         }
         history.record (before, kitPaths());
         family = {};
+        rackName = {};
         ++kitChanges;
         return true;
     }
@@ -635,7 +676,7 @@ namespace drumchimp
     {
         auto tree = state.copyState();
         tree.setProperty ("uiScale", uiScale, nullptr);
-        juce::ValueTree kitTree ("Kit");
+        juce::ValueTree kitTree ("Kit", { { "from", fromRacks ? "racks" : "library" } });
         {
             const juce::ScopedLock sl (kitLock);
             for (int pad = 0; pad < numPads; ++pad)
@@ -650,7 +691,8 @@ namespace drumchimp
 
         // The pattern as it is (hand edits included), one lane per pad: "step:velocity:repeats:offset;…".
         juce::ValueTree patternTree ("Pattern", { { "seed", juce::String ((juce::int64) patternSeed) }, { "stepsPerBar", pattern.stepsPerBar },
-                                                  { "bars", pattern.bars } });
+                                                  { "bars", pattern.bars }, { "numerator", pattern.numerator },
+                                                  { "denominator", pattern.denominator }, { "stepsPerBeat", pattern.stepsPerBeat } });
         for (int pad = 0; pad < numPads; ++pad)
         {
             juce::String cells;
@@ -687,6 +729,7 @@ namespace drumchimp
         std::array<juce::int64, numPads> sizes {};
         roles = defaultPadRoles;
         locked.fill (false);
+        fromRacks = kitTree.getProperty ("from").toString() == "racks";
         for (const auto& pad : kitTree)
             if (const int index = pad.getProperty ("index", -1); index >= 0 && index < numPads)
             {
@@ -704,6 +747,7 @@ namespace drumchimp
         }
         history.clear();
         family = {};
+        rackName = {};
 
         // The saved pattern, as it was: not made again from its settings.
         lastStyle = juce::roundToInt (state.getRawParameterValue ("style")->load());
@@ -711,6 +755,14 @@ namespace drumchimp
         {
             Pattern restored;
             restored.stepsPerBar = (int) patternTree.getProperty ("stepsPerBar", 16) == 12 ? 12 : 16;
+            // The meter: 4/4, 3/4 or 6/8 (3/4 and 6/8 on 12 sixteenths); anything else is 4/4.
+            const int num = patternTree.getProperty ("numerator", 4), den = patternTree.getProperty ("denominator", 4);
+            if (restored.stepsPerBar == 12 && ((num == 3 && den == 4) || (num == 6 && den == 8)))
+            {
+                restored.numerator = num;
+                restored.denominator = den;
+            }
+            restored.stepsPerBeat = restored.numerator == 6 ? 6 : (int) std::lround (restored.stepsPerBar / restored.beatsPerBar());
             restored.bars = juce::jlimit (1, maxPatternSteps / restored.stepsPerBar, (int) patternTree.getProperty ("bars", 4));
             laneLocks.fill (false);
             for (const auto& lane : patternTree)

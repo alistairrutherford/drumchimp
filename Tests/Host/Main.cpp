@@ -364,6 +364,56 @@ namespace
         juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
         check (q.currentPattern() == now && q.isLaneLocked (1) && ! q.isLaneLocked (0), "pattern, hand edits and lane locks restored");
         check (std::abs (q.state.getRawParameterValue ("swing")->load() - (float) swing) < 0.001f, "and restoring doesn't reset the swing");
+
+        // A 3/4 style: the pattern, its playback and its state are in 3/4.
+        setParam (p, "style", 20.0f);                  // Waltz
+        setParam (p, "humanise", 0.0f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        const auto waltz = p.currentPattern();
+        check (waltz.numerator == 3 && waltz.denominator == 4 && waltz.lengthBeats() == 12.0 && p.patternTimeSignature() == 304,
+               "Waltz: a 4-bar pattern of 3/4, 12 beats long");
+        FakePlayHead head34;
+        head34.info.setIsPlaying (true);
+        head34.info.setBpm (150.0);
+        head34.info.setTimeSignature (juce::AudioPlayHead::TimeSignature { 3, 4 });
+        p.setPlayHead (&head34);
+        std::multiset<std::pair<juce::int64, int>> want34, got34;
+        double ppq34 = 0.0;
+        juce::int64 at34 = 0;
+        for (int i = 0; i < 600; ++i)                  // 16 beats: 5⅓ bars of 3/4
+        {
+            head34.info.setPpqPosition (ppq34);
+            run (p, b);
+            for (const auto meta : b.midi)
+                if (meta.getMessage().isNoteOn())
+                    got34.insert ({ at34 + meta.samplePosition, padForNote (NoteMap::gm, meta.getMessage().getNoteNumber()) });
+            at34 += 512;
+            ppq34 += 512 * 150.0 / 60.0 / 48000.0;
+        }
+        p.setPlayHead (nullptr);
+        for (const auto& e : expectedOns (waltz, 0.0, ppq34, p.state.getRawParameterValue ("swing")->load(), 150.0, 48000.0))
+            if (e.first < at34)                        // only what the blocks played
+                want34.insert (e);
+        int downbeats = 0;
+        for (const auto& [sample, pad] : got34)
+            if (pad == 0 && std::abs (std::fmod ((double) sample * 150.0 / 60.0 / 48000.0, 3.0)) < 1.0e-3)
+                ++downbeats;
+        check (got34 == want34 && downbeats >= 5, "it plays in 3/4: every note on its sample, the kick on every bar's 1 ("
+                                                      + juce::String (downbeats) + " bars)");
+        check (p.hostTimeSignature() == 304, "and it reads the host's time signature (3/4)");
+        juce::MemoryBlock saved34;
+        p.getStateInformation (saved34);
+        DrumChimpProcessor r34;
+        r34.setStateInformation (saved34.getData(), (int) saved34.getSize());
+        check (r34.currentPattern() == waltz, "a 3/4 pattern restores as 3/4");
+        juce::String error34;
+        const auto file34 = p.writePatternMidi (error34);
+        juce::MemoryBlock data34;
+        file34.loadFileAsData (data34);
+        MidiSong song34;
+        std::string readError34;
+        check (readMidiFile ((const uint8_t*) data34.getData(), data34.getSize(), song34, readError34) && song34.numerator == 3,
+               "and its drag-out is a 3/4 MIDI file");
     }
 
     void testState (const Files& f)
@@ -638,6 +688,54 @@ namespace
         check (waitFor ([&] { return q.padSource (0).status == Status::loaded; }), "the moved kick loads");
         const auto found = q.padSource (0);
         check (found.path == kick.path && found.message.startsWith ("Found again"), "from where the library has it, saying so");
+
+        // Ableton's Drum Rack kits.
+        const auto& racks = index->racks();
+        check (racks.size() >= 50, juce::String ((int) racks.size()) + " of Ableton's Drum Rack kits can be played (the Core Library's)");
+        bool resolvedAll = true;
+        for (const auto& rack : racks)
+            for (const auto& pad : rack.pads)
+                resolvedAll = resolvedAll && index->find (pad.resolved) != nullptr && pad.resolved.find ("Factory Packs") == std::string::npos;
+        check (resolvedAll, "every pad of every one is a sample in the library, none from protected Packs");
+        DrumChimpProcessor k;
+        prepare (k);
+        waitFor ([&] { return k.padSource (0).status != Status::empty && allSettled (k); });
+        k.setKitsFromRacks (true);
+        bool racksLoad = true;
+        juce::StringArray names;
+        for (int round = 0; round < 5; ++round)
+        {
+            k.randomiseKit();
+            waitFor ([&] { return allSettled (k); });
+            names.addIfNotAlreadyThere (k.lastRack());
+            for (int pad = 0; pad < numPads; ++pad)
+            {
+                const auto st = k.padSource (pad).status;
+                const auto* info = index->find (k.padSource (pad).path.toStdString());
+                racksLoad = racksLoad && st == Status::loaded && info != nullptr;
+            }
+        }
+        check (racksLoad && names.size() >= 3 && ! names.contains (""), "Randomise from Ableton kits: 5 kits (" + names.joinIntoString (", ")
+                                                                              + "), every pad loads");
+        int selectorKit = -1;
+        for (int i = 0; i < (int) racks.size(); ++i)
+            if (racks[(size_t) i].name == "Selector Kit Warm")
+                selectorKit = i;
+        if (selectorKit >= 0)
+        {
+            k.setLocked (2, true);
+            const auto clapBefore = k.kitPaths()[2];
+            k.loadRack (selectorKit);
+            waitFor ([&] { return allSettled (k); });
+            check (k.lastRack() == "Selector Kit Warm" && k.kitPaths()[0].find ("Kick Remo") != std::string::npos
+                       && k.kitPaths()[1].find ("Snare Cust") != std::string::npos && k.kitPaths()[2] == clapBefore,
+                   "loading Selector Kit Warm by name: its kick on C1, its snare on D1, the locked pad kept");
+        }
+        juce::MemoryBlock rackState;
+        k.getStateInformation (rackState);
+        DrumChimpProcessor kr;
+        kr.setStateInformation (rackState.getData(), (int) rackState.getSize());
+        check (kr.kitsFromRacks(), "the kit source is saved with the set");
     }
 
     void testEditor (const Files&)

@@ -4,15 +4,19 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 6 is done (PLAN.md §10). The editor resizes (drag the corner), Settings
-lists the library's places and adds your own folders, and you can drag a hit in the step grid to
-set its velocity.
+**Status:** Phase 7 (first part) is done (PLAN.md §10).
+- **Meters:** 3/4 and 6/8 styles (Waltz, Jazz Waltz, 6/8 Ballad, Afro 6/8).
+- **Ableton kits:** Randomise can pick from Ableton's own Drum Rack kits (119 here), or load one
+  by name from the Kits menu.
+- **Editor:** it resizes (drag the corner). Settings lists the library's places and adds your
+  own folders, and you can drag a hit in the step grid to set its velocity.
 - **Into Live:** the pattern records on another track through *MIDI From*, every note within a
   sample of its beat, checked by the Live tests. *Drag MIDI* drops it on a clip slot. If a
   dragged clip and the generator both play, the status line says to set Source to *MIDI In*.
-- **Patterns:** twenty styles: Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass,
-  Breakbeat, Reggae, Disco, Shuffle, Jazz, Bossa Nova, Afrobeat, 2-Step, Dembow, Dubstep, Motown,
-  Punk. At Complexity 0 each plays its groove exactly as written; raise it for variations. Set Bars, Density, Complexity, Swing, Humanise, Ghost notes and Fill.
+- **Patterns:** twenty-four styles: Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum &
+  Bass, Breakbeat, Reggae, Disco, Shuffle, Jazz, Bossa Nova, Afrobeat, 2-Step, Dembow, Dubstep,
+  Motown, Punk, Waltz and Jazz Waltz (3/4), 6/8 Ballad and Afro 6/8 (set Live's time signature
+  to match). At Complexity 0 each plays its groove exactly as written; raise it for variations. Set Bars, Density, Complexity, Swing, Humanise, Ghost notes and Fill.
   Generate makes a new pattern; changing a setting remakes this one.
 - **Step grid:** click a step to edit it, and lock a lane to keep it.
 - **Playback and MIDI:** with Source on *Generator*, the pattern plays the pads in time with

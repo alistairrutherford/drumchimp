@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="DchpPj" name="DrumChimp" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.8.0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="0.9.0"
               companyName="Alistair Rutherford" companyWebsite="https://github.com/alistairrutherford/drumchimp"
               bundleIdentifier="com.alistairrutherford.drumchimp"
               pluginFormats="buildVST3,buildStandalone" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn,pluginProducesMidiOut"
@@ -25,6 +25,7 @@
       </GROUP>
       <GROUP id="dcGrp6" name="core/kit">
         <FILE id="dcF061" name="KitBuilder.h" compile="0" resource="0" file="Source/core/kit/KitBuilder.h"/>
+        <FILE id="dcF062" name="DrumRack.h" compile="0" resource="0" file="Source/core/kit/DrumRack.h"/>
       </GROUP>
       <GROUP id="dcGrp5" name="core/sampler">
         <FILE id="dcF051" name="DrumEngine.h" compile="0" resource="0" file="Source/core/sampler/DrumEngine.h"/>

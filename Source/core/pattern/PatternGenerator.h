@@ -13,8 +13,8 @@
 //             closed hats, a rim lane on the snares, a tom lane on any tom; otherwise it's silent.
 //   Feel      velocity (X 118, x/r 100, o 86, g 42, extras 70; x on the beat +8) and timing vary by
 //             up to ±14 velocity and ±12 ms with Humanise (anchors half as much).
-//   Fills     in every Nth bar (Fill: every 2, 4 or 8), from the last beat (the last two beats at
-//             Complexity > 0.6): everything but the kick stops, and toms run down (high → low) or
+//   Fills     in every Nth bar (Fill: every 2, 4 or 8), from the last felt beat (half the bar at
+//             Complexity > 0.6; 6/8's last beat is half its bar): everything but the kick stops, and toms run down (high → low) or
 //             the snare builds, with rolls at high Complexity. A crash follows on the next bar's
 //             one (and on the pattern's first beat, for crash = one styles).
 //   Locks     a locked pad's lane is copied from the previous pattern.
@@ -76,11 +76,14 @@ namespace drumchimp
         using namespace generator;
         Pattern out;
         out.stepsPerBar = style.grid;
+        out.numerator = style.numerator;
+        out.denominator = style.denominator;
+        out.stepsPerBeat = style.stepsPerBeat();
         out.bars = std::clamp (settings.bars, 1, maxPatternSteps / style.grid);
         const float d = std::clamp (settings.density, 0.0f, 1.0f), c = std::clamp (settings.complexity, 0.0f, 1.0f);
         const float h = std::clamp (settings.humanise, 0.0f, 1.0f);
         kitbuilder::Random random { settings.seed * 0x9e3779b97f4a7c15ull + 0x2545f4914f6cdd1dull };
-        const int beat = style.grid / 4;
+        const int beat = style.stepsPerBeat();
 
         for (int bar = 0; bar < out.bars; ++bar)
             for (const auto& lane : style.lanes)

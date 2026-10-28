@@ -2,11 +2,13 @@
 // is fixed-size (no allocation), so the audio thread can read one and the message thread can copy
 // and edit one freely; it reaches the audio thread whole, through a Handoff.
 //
-//   Pattern            8 lanes (one per pad) × up to 8 bars of 16 steps. A cell is a hit: velocity
+//   Pattern            8 lanes (one per pad) × up to 8 bars of 12 or 16 steps, in 4/4, 3/4 or 6/8. A
+//                      cell is a hit: velocity
 //                      (0 = none), repeats (a roll of 2 or 3 in the step) and a timing offset in ms
 //                      (Humanise, baked in so the drag-out has it too).
 //   forEachEvent       every note-on and note-off in [fromBeat, toBeat), the pattern looping from
-//                      beat 0 (bar 1 of the song): Swing delays the off-beat sixteenths, then each
+//                      beat 0 (bar 1 of the song, so the song's meter should be the pattern's):
+//                      Swing delays the off-beat sixteenths (on a grid of sixteenths), then each
 //                      hit's offset; a hit near the loop's end can land in the next loop
 //   forEachEventInBlock  the same for one audio block, each event on the first sample at or after
 //                      its time (as the Phase 0 test pattern did; never early)
@@ -35,11 +37,15 @@ namespace drumchimp
     {
         int stepsPerBar = 16;
         int bars = 1;
+        int numerator = 4, denominator = 4;          // the meter
+        int stepsPerBeat = 4;                        // a felt beat: grid lines, accents
         std::array<std::array<Cell, maxPatternSteps>, numPads> lanes {};
 
         int steps() const noexcept { return stepsPerBar * bars; }
-        double stepBeats() const noexcept { return 4.0 / stepsPerBar; }
-        double lengthBeats() const noexcept { return 4.0 * bars; }
+        double beatsPerBar() const noexcept { return numerator * 4.0 / denominator; }   // quarter notes
+        double stepBeats() const noexcept { return beatsPerBar() / stepsPerBar; }
+        double lengthBeats() const noexcept { return beatsPerBar() * bars; }
+        bool sixteenths() const noexcept { return stepsPerBar * 4 == (int) std::lround (beatsPerBar() * 16); }
 
         int hits (int pad) const noexcept
         {
@@ -51,7 +57,8 @@ namespace drumchimp
 
         bool operator== (const Pattern& o) const noexcept
         {
-            if (stepsPerBar != o.stepsPerBar || bars != o.bars)
+            if (stepsPerBar != o.stepsPerBar || bars != o.bars || numerator != o.numerator || denominator != o.denominator
+                || stepsPerBeat != o.stepsPerBeat)
                 return false;
             for (int p = 0; p < numPads; ++p)
                 for (int s = 0; s < steps(); ++s)
@@ -64,11 +71,11 @@ namespace drumchimp
     namespace pattern
     {
         // A hit's start in beats from the loop's start: Swing delays the second sixteenth of each
-        // eighth (50% straight … 66% a triplet feel … 75%), on a 16-step grid only.
+        // eighth (50% straight … 66% a triplet feel … 75%), on a grid of sixteenths only.
         inline double hitBeat (const Pattern& p, int step, float offsetMs, double swing, double bpm) noexcept
         {
             double beat = step * p.stepBeats();
-            if (p.stepsPerBar == 16 && (step & 1) != 0)
+            if (p.sixteenths() && (step & 1) != 0)
                 beat += (swing - 0.5) * 2.0 * p.stepBeats();
             return beat + offsetMs * bpm / 60000.0;
         }
@@ -130,6 +137,8 @@ namespace drumchimp
             song.ppq = ppq;
             song.bpm = bpm;
             song.name = name;
+            song.numerator = p.numerator;
+            song.denominator = p.denominator;
             const auto ticks = [ppq] (double beats) { return (int64_t) std::llround (std::max (0.0, beats) * ppq); };
             for (int loop = 0; loop < loops; ++loop)
                 for (int pad = 0; pad < numPads; ++pad)
