@@ -399,7 +399,7 @@ Randomise are built on top of it.
 | **Sequencer / sampler** | Offline render against a fake transport: notes land on the exact sample, swing offsets are right, choke works, nothing gets stuck on a transport jump, and output doesn't depend on block size. |
 | **RT safety** | Malloc-hook test (from Chordism). |
 | **Host** | `pluginval` strictness 10, in CI. |
-| **Live** (DrumChimpBridge) | `test_routing_live.py`: generator → *MIDI From* → recorded clip matches the pattern. `test_state_live.py`: everything survives duplicating the track and saving and reopening the set. `test_clip_playback_live.py`: an exported `.mid`, loaded as a clip on DrumChimp's track in *MIDI In* mode, plays the pads (checked with meters). Dragging itself stays a manual check. |
+| **Live** (`Tests/live/run_live_tests.py`, through ClaudeLiveBridge; as built in Phase 5) | Routing: the generator through *MIDI From* is recorded with every note on its sixteenth to within a sample, the kick on all 16 beats, and loop 2 the same as loop 1. Swing: Funk at 66% puts the off-beat sixteenths exactly a third of a step late. State: a duplicated DrumChimp plays exactly the original's pattern. Dragging stays a manual check. Saving and reopening uses the same state calls as duplicating, but isn't automated, because the LOM has no save. A clip playing DrumChimp in *MIDI In* mode isn't automated either: the bridge can't write a clip, and the processor tests cover incoming notes. |
 
 ---
 
@@ -597,6 +597,33 @@ Patterns: §3.4 describes them as built.
   Complexity, fills, locks, fallbacks, playback timing, swing, the loop point, MIDI, Handoff).
   The host generator test was rewritten as above. `pluginval` strictness 10 passes.
 
-**Next:** Phase 5, into Live: the MIDI export drag-out exists already. What's left is checking
-the drag-out by hand in Live, the *MIDI From* route (already exact), and a DrumChimpBridge for
-tests in Live.
+### Phase 5 (2026-10-28, Live 12.4.7): done, G8 passes
+
+Getting patterns into Live (§3.6).
+
+- **Route B, recording on another track:** checked automatically in Live
+  (`Tests/live/run_live_tests.py`, 8 checks, all passing):
+  - DrumChimp (House, 2 bars, Humanise 0, no fills) recorded through *MIDI From* for two loops
+    at 120 BPM: 74 notes, every one on its sixteenth to within a sample, the kick on all 16
+    beats, and the second loop identical to the first.
+  - Funk at Swing 66%: 19 off-beat sixteenths exactly a third of a step late, 22 on the grid.
+  - A duplicated DrumChimp track plays the original's pattern note for note (37 and 37). The
+    pattern travels in the device's state; a new instance would have had a new seed.
+- **No separate bridge:** the tests use ClaudeLiveBridge (the ableton-mcp project, port 9873)
+  rather than a DrumChimpBridge copy, so nothing more needs installing in Live. They run in
+  whatever set is open and leave it as it was: their own tracks are added and then deleted, armed
+  tracks are disarmed and re-armed, and the tempo is put back.
+- **Route A, the drag-out onto DrumChimp's own track:** the export is the pattern (Phase 4, with
+  a host test that reads the file back). The drag itself worked by hand in Phase 0. New: if notes
+  arrive while the generator plays, which means a dragged-out clip with Source still on
+  *Generator* doubling every hit, the status line says so for 4 s. It suggests setting Source to
+  *MIDI In*.
+- **Route C** (Send to Clip) stays optional, for Phase 7.
+- **Not automated, and why:** saving and reopening the set (the LOM has no save; duplicating
+  covers the same state calls) and a clip on DrumChimp's track in *MIDI In* mode (the bridge
+  can't write clips; the processor tests cover incoming notes).
+- **What Live last ran:** the Phase 4 build. The Phase 5 build adds only the warning, which the
+  host tests check. `pluginval` strictness 10 passes.
+
+**Next:** Phase 6, UI and hardening: a fuller editor, performance tuning, missing-file reporting,
+and a fresh-Mac install check.

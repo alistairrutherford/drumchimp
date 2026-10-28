@@ -77,11 +77,13 @@ namespace drumchimp
         };
 
         // Incoming notes play the pads; they don't go out.
+        int incoming = 0;
         for (const auto meta : midi)
         {
             const auto m = meta.getMessage();
             if (m.isNoteOn())
             {
+                ++incoming;
                 notesIn.fetch_add (1, std::memory_order_relaxed);
                 if (const int pad = padForNote (map, m.getNoteNumber()); pad >= 0)
                     addTrigger (meta.samplePosition, pad, m.getFloatVelocity());
@@ -113,6 +115,8 @@ namespace drumchimp
         const double sr = preparedRate;       // the engine's rate too
         const Pattern* pattern = patternHandoff.current();
         const bool generate = reader.generatorOn() && pattern != nullptr && isPlaying && position.hasValue() && tempo.hasValue() && *tempo > 0.0;
+        if (generate && incoming > 0)
+            doubled.store (true, std::memory_order_relaxed);   // a clip (or a keyboard) and the generator at once
         if (wasGenerating && (! generate || map != openMap || pattern != lastPattern))
             flushNoteOffs (midi, 0, openMap);     // a new pattern may not end what the old one started
         if (generate)

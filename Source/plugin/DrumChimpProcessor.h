@@ -119,6 +119,9 @@ namespace drumchimp
         bool isLaneLocked (int pad) const { return laneLocks[(size_t) juce::jlimit (0, numPads - 1, pad)]; }
         void setLaneLocked (int pad, bool shouldLock);
         int playingStep() const noexcept { return playStep.load(); }   // −1 when the generator isn't playing
+        // Whether notes came in while the generator played, since the last call: a dragged-out clip
+        // on this track with Source still on Generator plays every hit twice.
+        bool takeDoubled() noexcept { return doubled.exchange (false); }
         juce::uint32 patternVersion() const noexcept { return patternChanges.load(); }
 
         struct Status
@@ -182,6 +185,7 @@ namespace drumchimp
         double expectedPpq = 0.0;
         const Pattern* lastPattern = nullptr;
         std::atomic<int> playStep { -1 };
+        std::atomic<bool> doubled { false };
 
         std::atomic<juce::uint32> pendingAuditions { 0 }, hits { 0 };
         std::atomic<bool> playing { false };

@@ -204,6 +204,7 @@ namespace drumchimp
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ghostsAttachment;
         StepGrid grid;
         juce::uint32 seenPattern = ~0u;
+        juce::uint32 doubledUntil = 0;     // ms: the status line warns until then
 
         juce::Label status, libraryStatus;
         juce::uint32 seenKit = ~0u, seenLibrary = ~0u;

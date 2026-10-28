@@ -722,9 +722,21 @@ namespace drumchimp
         characterLabel.setText (c < 0.34f ? "Matched" : c < 0.67f ? "Mixed" : "Wild", juce::dontSendNotification);
 
         const auto s = processor.status();
-        status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
-                            + juce::String (s.ppq, 2) + " · notes in " + juce::String (s.notesIn) + ", out " + juce::String (s.notesOut),
-                        juce::dontSendNotification);
+        const auto now = juce::Time::getMillisecondCounter();
+        if (processor.takeDoubled())
+            doubledUntil = now + 4000;
+        if (now < doubledUntil)
+        {
+            status.setText ("Notes are coming in while the generator plays: set Source to MIDI In to hear only the clip", juce::dontSendNotification);
+            status.setColour (juce::Label::textColourId, warning);
+        }
+        else
+        {
+            status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
+                                + juce::String (s.ppq, 2) + " · notes in " + juce::String (s.notesIn) + ", out " + juce::String (s.notesOut),
+                            juce::dontSendNotification);
+            status.setColour (juce::Label::textColourId, faint);
+        }
         const auto lib = processor.library->status();
         libraryStatus.setText (lib.scanning && lib.samples == 0 ? juce::String ("Library: scanning...")
                                    : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "

@@ -293,6 +293,18 @@ namespace
         for (const auto meta : b.midi)
             offs = offs && meta.getMessage().isNoteOff();
         check (peak > 0.5f && offs, "the pads sound, and stopping sends only note-offs");
+
+        // A clip on this track and the generator at once: the editor warns.
+        p.takeDoubled();
+        head.info.setIsPlaying (true);
+        run (p, b, { { 0, 36, 100 } });
+        check (p.takeDoubled() && ! p.takeDoubled(), "notes coming in while the generator plays are noticed (once)");
+        setParam (p, "source", 1.0f);
+        run (p, b, { { 0, 36, 100 } });
+        check (! p.takeDoubled(), "but not with Source on MIDI In");
+        setParam (p, "source", 0.0f);
+        head.info.setIsPlaying (false);
+        run (p, b);
         p.setPlayHead (nullptr);
 
         // Settings remake the pattern with the same seed; Generate makes a new one.
