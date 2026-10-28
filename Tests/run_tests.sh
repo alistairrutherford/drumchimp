@@ -22,3 +22,4 @@ compile_and_run () {
 }
 
 compile_and_run test_core
+compile_and_run test_sampler

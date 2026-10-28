@@ -2,8 +2,6 @@
 // stands in for the pattern generator (Phase 4) so the spikes can check MIDI out, *MIDI From*
 // recording and the drag-out. Plain C++, no JUCE, no allocation: safe on the audio thread.
 //
-//   gmNotes          the default note of each pad (PLAN.md §3.1)
-//   padForNote       note → pad, or -1
 //   forEachEvent     every note-on and note-off whose time is in [fromBeat, toBeat)
 //   forEachEventInBlock
 //                    the same for one audio block, with each event on the first sample at or after
@@ -12,6 +10,7 @@
 #pragma once
 
 #include "../midiio/MidiFile.h"
+#include "NoteMap.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -19,19 +18,6 @@
 
 namespace drumchimp
 {
-    constexpr int numPads = 8;
-
-    // Kick, Snare, Clap, Closed hat, Open hat, Low tom, High tom, Crash.
-    constexpr std::array<uint8_t, numPads> gmNotes { 36, 38, 39, 42, 46, 45, 50, 49 };
-
-    constexpr int padForNote (int note) noexcept
-    {
-        for (int i = 0; i < numPads; ++i)
-            if (gmNotes[(size_t) i] == note)
-                return i;
-        return -1;
-    }
-
     namespace testpattern
     {
         constexpr int stepsPerBar = 16;
@@ -51,7 +37,7 @@ namespace drumchimp
             { 0, 7, 100 },                                                      // crash on the one
         }};
 
-        // Calls fn (beat, pad, note, velocity, isNoteOn) for each event in [fromBeat, toBeat), bar
+        // Calls fn (beat, pad, velocity, isNoteOn) for each event in [fromBeat, toBeat), bar
         // by bar and in pattern order (not sorted by time: the caller's MidiBuffer sorts them).
         template <typename Fn>
         void forEachEvent (double fromBeat, double toBeat, Fn&& fn)
@@ -66,16 +52,15 @@ namespace drumchimp
                 {
                     const double on = (double) bar * beatsPerBar + h.step * stepBeats;
                     const double off = on + noteBeats;
-                    const auto note = gmNotes[(size_t) h.pad];
                     if (on >= fromBeat && on < toBeat)
-                        fn (on, h.pad, note, h.velocity, true);
+                        fn (on, h.pad, h.velocity, true);
                     if (off >= fromBeat && off < toBeat)
-                        fn (off, h.pad, note, (uint8_t) 0, false);
+                        fn (off, h.pad, (uint8_t) 0, false);
                 }
         }
 
         // A block of n samples, sample i at fromBeat + i * beatsPerSample: calls fn (sample, pad,
-        // note, velocity, isNoteOn) for each event whose first sample at or after it is in the
+        // velocity, isNoteOn) for each event whose first sample at or after it is in the
         // block. Consecutive blocks see each event once: the block is chosen by that rounded
         // sample, not by comparing beats, so a beat exactly on a block's edge isn't lost or
         // doubled by rounding (an event within 1e-6 samples after a sample counts as on it).
@@ -85,15 +70,15 @@ namespace drumchimp
             if (n <= 0 || ! (beatsPerSample > 0.0))
                 return;
             forEachEvent (fromBeat - 2.0 * beatsPerSample, fromBeat + (n + 1) * beatsPerSample,
-                          [&] (double beat, int pad, uint8_t note, uint8_t velocity, bool on)
+                          [&] (double beat, int pad, uint8_t velocity, bool on)
             {
                 const auto sample = (int) std::ceil ((beat - fromBeat) / beatsPerSample - 1.0e-6);
                 if (sample >= 0 && sample < n)
-                    fn (sample, pad, note, velocity, on);
+                    fn (sample, pad, velocity, on);
             });
         }
 
-        inline MidiSong testPatternSong (int bars, double bpm, int ppq = 960)
+        inline MidiSong testPatternSong (int bars, double bpm, NoteMap map = NoteMap::gm, int ppq = 960)
         {
             MidiSong song;
             song.ppq = ppq;
@@ -104,7 +89,7 @@ namespace drumchimp
                 for (const auto& h : hits)
                 {
                     const double on = bar * beatsPerBar + h.step * stepBeats;
-                    song.notes.push_back ({ ticks (on), ticks (on + noteBeats), gmNotes[(size_t) h.pad], h.velocity, 0 });
+                    song.notes.push_back ({ ticks (on), ticks (on + noteBeats), noteForPad (map, h.pad), h.velocity, 0 });
                 }
             std::stable_sort (song.notes.begin(), song.notes.end(), [] (const MidiNote& a, const MidiNote& b)
             {

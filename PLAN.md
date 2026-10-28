@@ -227,7 +227,7 @@ Route A covers "record into the same track" for v1, with no set-up. Route C make
 | Framework | **JUCE 8.0.14**, C++17, **Projucer + xcodebuild** | Same as ChordChimp and NoteCap. |
 | Formats | **VST3 instrument** with an event output bus, plus **Standalone** (dev) | MIDI From needs VST (§2). Standalone is quicker for debugging the sampler and UI. |
 | Audio files | JUCE `AudioFormatManager` (WAV, AIFF, FLAC) | Covers everything in Ableton's library. |
-| Tests | Plain clang test scripts (`Tests/run_tests.sh`), `pluginval` strictness 10, and LiveBridge for tests in Live | Same toolchain as the sibling projects. |
+| Tests | Plain clang test scripts for the core (`Tests/run_tests.sh`), a JUCE console app for the processor (`Tests/run_host_tests.sh`, with ChordChimp's malloc hook), `pluginval` strictness 10, and the ClaudeLiveBridge for tests in Live | Same toolchain as the sibling projects. |
 
 ```
                     message thread                                  audio thread
@@ -252,8 +252,8 @@ Route A covers "record into the same track" for v1, with no set-up. Route C make
 | `Classifier` | Path → (role, confidence, family tags). Pure and table-driven, so it is easy to unit-test. |
 | `LibraryIndex` | Look up samples by role and family; search text for the browser. |
 | `KitBuilder` | Choose samples for the pads (coherence, locks, seed); keep the kit history. |
-| `SampleLoader` / `SampleBank` | Decode and resample to the host rate off the audio thread; hand a finished bank to the audio thread through an atomic pointer swap. Old banks are freed on the message thread. |
-| `PadVoice` | One-shot playback with pitch (interpolated), decay envelope, pan and choke. Retriggering uses a 2 ms fade to avoid clicks. |
+| `SampleLoader` / `KitBank` | Decode off the audio thread, at the file's own rate; hand a finished bank to the audio thread through an atomic pointer swap. Old banks are freed on the message thread. (Phase 1: the voices resample, which Tune needs anyway, so a host rate change needs no reload.) |
+| `DrumEngine` (voices) | One-shot playback with pitch (Hermite-interpolated), decay envelope, pan and choke; 32 voices. Retriggering uses a 2 ms fade to avoid clicks. |
 | `StyleLibrary` / `PatternGenerator` | Load the style JSON; `(style, params, seed) → Pattern`. |
 | `Sequencer` | Turns a Pattern plus host PPQ into sample-accurate note events; handles loop wrap, transport jumps and swing. |
 | `MidiExporter` | Pattern → Standard MIDI File (with the tempo and the note map). |
@@ -383,4 +383,33 @@ passes, and the 32 core tests pass (`Tests/run_tests.sh`).
 | (d) Library scan time | **Pass: 1.2 s** for the whole library (`Tools/scan_library.sh`). 9 roots from Library.cfg; 5,637 audio files (9,012 `.asd` skipped); 531 loops, 472 files too long and 0 unreadable were left out. That leaves 4,634 one-shots, 3,939 of them in drum folders. Headers take 0.1–0.2 ms each. Phase 2 notes: the `808`/`909` folders (from `Multisamples/Drum Machines`) and `Chops` hold mixed roles, so file-name rules matter there. The CSV list (`--csv`) is the starting point for the hand-labelled fixture. |
 | (e) A Remote Script can find a DrumChimp's track | **Pass.** Live leaves non-automatable VST3 parameters out of the LOM: the first, non-automatable *Instance ID* didn't appear in `list_parameters`. The automatable one does, and its display text gives the ID (`12603`). **Duplicating the track copies the ID** (checked: both report 12603), so in Phase 7 the Remote Script resolves clashes itself: the parameter is automatable, so the script can write a new ID into the copy. Writing the clip itself (`ClipSlot.create_clip`, `Clip.add_new_notes`) is standard LOM, left to Phase 7. |
 
-**Next:** Phase 1, the sampler and pads. A dropped file then loads into its pad and plays.
+### Phase 1 (2026-10-28, Live 12.4.7): done
+
+The sampler and pads. Dropping a sample on a pad now loads and plays it.
+
+- **Engine** (`core/sampler/DrumEngine.h`): 32 voices with Hermite interpolation at the sample's
+  own rate, Level, Pan (equal power), Tune ±24 st, Decay (−60 dB at the time; *Full* plays the
+  whole sample), velocity sensitivity, four choke groups (the hats share A), and Mute/Solo. A
+  retrigger, a choke or a sample swap fades the old voice over 2 ms. Kit banks reach the audio
+  thread through an atomic handoff. An old bank retires only when no voice still plays a sample
+  that only it has. Every sample is freed on the message thread.
+- **Plug-in:** 67 parameters (8 per pad, plus Source, Note map and Instance ID). Note map is
+  *GM* or *Chromatic*. Samples load on a background thread (`SampleLoader`: WAV, AIFF, FLAC, up to
+  30 s). A new instance gets the Core Library 909 kit (`DefaultKit.h`), unless the host restores a
+  state or a pad is set first. The state holds each pad's path and file size. A missing file
+  shows as missing, keeps its size for Phase 3 to find it again, and its pad stays silent. The
+  Instance ID is now set so that it is saved (the first version wasn't: the tests caught it).
+- **Editor:** eight pads that light when they play (click: select and play; drop: load), and a
+  panel for the selected pad: Load…, Clear, five knobs, Choke, Mute, Solo.
+- **Tests:** `Tests/run_tests.sh`, 56 core checks. Hits land on their exact sample at any block
+  size; Tune and the host rate, level, pan, velocity, decay, choke, retrigger and mute work; a
+  bank swap allocates nothing on the audio thread. `Tests/run_host_tests.sh`, 29 processor checks.
+  Loading (and a non-audio file reported), exact timing through `processBlock`, the note maps,
+  the generator, state round trip and a missing sample, the default kit, and the editor. **No
+  allocation in 400 blocks** of notes, generator, a sample swap, a loop jump and a note-map
+  change. It also writes `Tests/build/editor.png`. `pluginval` strictness 10 passes.
+- **In Live:** the default 909 kit plays (track meter 0.72). The generator's MIDI out, recorded
+  through *MIDI From*, is still exact over 4 bars. A duplicated track plays the same kit restored
+  from its state (original muted, master at one track's level).
+
+**Next:** Phase 2, the library scanner and the classifier.

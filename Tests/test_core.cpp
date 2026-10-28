@@ -18,7 +18,7 @@ namespace
     std::vector<Event> collect (double from, double to)
     {
         std::vector<Event> out;
-        testpattern::forEachEvent (from, to, [&] (double beat, int pad, uint8_t, uint8_t, bool on) { out.push_back ({ beat, pad, on }); });
+        testpattern::forEachEvent (from, to, [&] (double beat, int pad, uint8_t, bool on) { out.push_back ({ beat, pad, on }); });
         std::sort (out.begin(), out.end(), [] (const Event& a, const Event& b)
         {
             return a.beat != b.beat ? a.beat < b.beat : (a.pad != b.pad ? a.pad < b.pad : a.on < b.on);
@@ -63,7 +63,7 @@ namespace
             std::vector<std::pair<int64_t, int>> ons;                // (global sample, pad)
             const int64_t total = 2 * 4 * 22050;                    // two bars
             for (int64_t start = 0; start < total; start += blockSize)
-                testpattern::forEachEventInBlock ((double) start * bps, bps, blockSize, [&] (int sample, int pad, uint8_t, uint8_t, bool on)
+                testpattern::forEachEventInBlock ((double) start * bps, bps, blockSize, [&] (int sample, int pad, uint8_t, bool on)
                 {
                     if (on && start + sample < total)               // the last block may run into bar 3
                         ons.push_back ({ start + sample, pad });
@@ -84,7 +84,8 @@ namespace
 
         check (collect (-4.0, 0.0).size() == 2 * testpattern::hits.size(), "negative positions (pre-roll) loop too");
         check (collect (2.0, 2.0).empty(), "an empty window has no events");
-        check (padForNote (36) == 0 && padForNote (49) == 7 && padForNote (60) == -1, "note → pad");
+        check (padForNote (NoteMap::gm, 36) == 0 && padForNote (NoteMap::gm, 49) == 7 && padForNote (NoteMap::gm, 60) == -1, "GM: note → pad");
+        check (padForNote (NoteMap::chromatic, 43) == 7 && noteForPad (NoteMap::chromatic, 2) == 38 && padForNote (NoteMap::chromatic, 49) == -1, "Chromatic: note ↔ pad");
 
         const auto song = testpattern::testPatternSong (4, 97.0);
         const auto bytes = writeMidiFile (song);

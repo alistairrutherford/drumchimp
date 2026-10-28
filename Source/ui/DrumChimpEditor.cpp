@@ -5,13 +5,31 @@ namespace drumchimp
     namespace
     {
         const juce::Colour background { 0xff15171c }, panel { 0xff1e2128 }, raised { 0xff2a2e37 }, outline { 0xff383d48 };
-        const juce::Colour text { 0xffe6e8ec }, dim { 0xff9aa1ad }, accent { 0xff5cc8a8 };
-
-        constexpr std::array<const char*, numPads> padNames { "Kick", "Snare", "Clap", "Closed hat", "Open hat", "Low tom", "High tom", "Crash" };
+        const juce::Colour text { 0xffe6e8ec }, dim { 0xff9aa1ad }, faint { 0xff5d6472 }, accent { 0xff5cc8a8 }, warning { 0xfff2a541 };
 
         juce::Font font (float height, bool bold = false)
         {
             return juce::Font (juce::FontOptions (height, bold ? juce::Font::bold : juce::Font::plain));
+        }
+
+        using Status = DrumChimpProcessor::PadSource::Status;
+
+        juce::String sampleName (const DrumChimpProcessor::PadSource& s)
+        {
+            switch (s.status)
+            {
+                case Status::empty:   return "Empty";
+                case Status::loading: return "Loading...";
+                case Status::missing: return "Missing: " + juce::File (s.path).getFileNameWithoutExtension();
+                case Status::failed:  return "Can't load: " + juce::File (s.path).getFileNameWithoutExtension();
+                case Status::loaded:  break;
+            }
+            return juce::File (s.path).getFileNameWithoutExtension();
+        }
+
+        juce::StringArray audioFileTypes()
+        {
+            return { "*.wav", "*.aif", "*.aiff", "*.flac" };
         }
     }
 
@@ -47,11 +65,9 @@ namespace drumchimp
         }
         dragging = true;
         repaint();
-        DrumChimpProcessor::logSpike ("drag-out started: " + file.getFullPathName());
         juce::DragAndDropContainer::performExternalDragDropOfFiles ({ file.getFullPathName() }, false, this,
                                                                     [safe = juce::Component::SafePointer<DragHandle> (this)]
         {
-            DrumChimpProcessor::logSpike ("drag-out finished");
             if (safe != nullptr)
             {
                 safe->dragging = false;
@@ -67,47 +83,206 @@ namespace drumchimp
     }
 
     //==========================================================================
+    PadButton::PadButton (DrumChimpProcessor& p, int i, std::function<void (int)> select)
+        : processor (p), index (i), onSelect (std::move (select))
+    {
+    }
+
+    void PadButton::refresh (bool isSelected, NoteMap map)
+    {
+        source = processor.padSource (index);
+        selected = isSelected;
+        noteMap = map;
+        setTooltip (source.message.isNotEmpty() ? source.message : source.path);
+        repaint();
+    }
+
+    void PadButton::fade()
+    {
+        if (flash > 0.0f)
+        {
+            flash = flash < 0.05f ? 0.0f : flash * 0.6f;
+            repaint();
+        }
+    }
+
+    void PadButton::paint (juce::Graphics& g)
+    {
+        auto r = getLocalBounds().toFloat().reduced (4.0f);
+        g.setColour (raised.interpolatedWith (accent, 0.55f * flash));
+        g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (dragOver ? accent : selected ? text : outline);
+        g.drawRoundedRectangle (r, 6.0f, dragOver || selected ? 2.0f : 1.0f);
+
+        auto inner = r.reduced (9.0f, 7.0f).toNearestInt();
+        g.setFont (font (13.0f, true));
+        g.setColour (text);
+        g.drawText (defaultRoles[(size_t) index], inner.removeFromTop (18), juce::Justification::topLeft);
+        g.setFont (font (11.0f));
+        g.setColour (faint);
+        g.drawText (juce::MidiMessage::getMidiNoteName (noteForPad (noteMap, index), true, true, 3), inner.removeFromBottom (14),
+                    juce::Justification::bottomRight);
+        const bool problem = source.status == Status::missing || source.status == Status::failed;
+        g.setColour (problem ? warning : source.status == Status::loaded ? dim : faint);
+        g.setFont (font (12.0f));
+        g.drawFittedText (sampleName (source), inner, juce::Justification::topLeft, 3, 0.9f);
+    }
+
+    void PadButton::mouseDown (const juce::MouseEvent&)
+    {
+        onSelect (index);
+        processor.audition (index);
+    }
+
+    void PadButton::filesDropped (const juce::StringArray& files, int, int)
+    {
+        dragOver = false;
+        if (! files.isEmpty())
+            processor.loadSample (index, juce::File (files[0]));
+        onSelect (index);
+    }
+
+    //==========================================================================
     DrumChimpEditor::DrumChimpEditor (DrumChimpProcessor& p)
         : AudioProcessorEditor (p), processor (p), dragHandle (p)
     {
+        lookAndFeel.setColourScheme ({ background, panel, raised, outline, text, accent, text, raised, text });
+        lookAndFeel.setColour (juce::Slider::rotarySliderFillColourId, accent);
+        lookAndFeel.setColour (juce::Slider::rotarySliderOutlineColourId, outline);
+        lookAndFeel.setColour (juce::Slider::thumbColourId, text);
+        lookAndFeel.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        lookAndFeel.setColour (juce::ToggleButton::tickColourId, accent);
+        setLookAndFeel (&lookAndFeel);
+
         source.addItemList ({ "Generator", "MIDI In" }, 1);
         source.setTooltip ("Generator: the test pattern plays with Live's transport and goes to MIDI out. MIDI In: only incoming notes play the pads");
         sourceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "source", source);
+        noteMap.addItemList ({ "GM", "Chromatic" }, 1);
+        noteMap.setTooltip ("Which notes play the pads. GM: the General MIDI drum notes (they also play a Drum Rack). Chromatic: C1 to G1");
+        noteMapAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "notemap", noteMap);
         addAndMakeVisible (source);
+        addAndMakeVisible (noteMap);
         addAndMakeVisible (dragHandle);
 
         for (int i = 0; i < numPads; ++i)
         {
-            auto& pad = pads[(size_t) i];
-            pad.setButtonText (juce::String (padNames[(size_t) i]) + "\n" + juce::MidiMessage::getMidiNoteName (gmNotes[(size_t) i], true, true, 3));
-            pad.setColour (juce::TextButton::buttonColourId, raised);
-            pad.setColour (juce::TextButton::textColourOffId, text);
-            pad.onClick = [this, i] { processor.audition (i); };
-            addAndMakeVisible (pad);
+            pads.push_back (std::make_unique<PadButton> (p, i, [this] (int pad) { select (pad); }));
+            addAndMakeVisible (*pads.back());
         }
 
-        status.setFont (font (12.5f));
-        status.setColour (juce::Label::textColourId, dim);
-        status.setJustificationType (juce::Justification::topLeft);
+        padTitle.setFont (font (15.0f, true));
+        padTitle.setColour (juce::Label::textColourId, text);
+        padSample.setFont (font (12.0f));
+        padSample.setColour (juce::Label::textColourId, dim);
+        padSample.setJustificationType (juce::Justification::topLeft);
+        addAndMakeVisible (padTitle);
+        addAndMakeVisible (padSample);
+
+        loadButton.onClick = [this] { chooseSample(); };
+        clearButton.onClick = [this] { processor.clearPad (selected); };
+        addAndMakeVisible (loadButton);
+        addAndMakeVisible (clearButton);
+
+        const std::array<const char*, 5> names { "Level", "Pan", "Tune", "Decay", "Velocity" };
+        for (size_t i = 0; i < knobs.size(); ++i)
+        {
+            knobs[i].slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+            knobs[i].slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
+            knobs[i].slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+            knobs[i].label.setText (names[i], juce::dontSendNotification);
+            knobs[i].label.setJustificationType (juce::Justification::centred);
+            knobs[i].label.setFont (font (12.0f));
+            knobs[i].label.setColour (juce::Label::textColourId, dim);
+            addAndMakeVisible (knobs[i].slider);
+            addAndMakeVisible (knobs[i].label);
+        }
+        choke.addItemList (params::chokeGroups, 1);
+        choke.setTooltip ("Choke group: a pad cuts off the other pads in its group (the hats share A)");
+        addAndMakeVisible (choke);
+        addAndMakeVisible (mute);
+        addAndMakeVisible (solo);
+
+        status.setFont (font (12.0f));
+        status.setColour (juce::Label::textColourId, faint);
         addAndMakeVisible (status);
 
-        log.setMultiLine (true);
-        log.setReadOnly (true);
-        log.setFont (font (12.0f));
-        log.setColour (juce::TextEditor::backgroundColourId, panel);
-        log.setColour (juce::TextEditor::textColourId, text);
-        log.setColour (juce::TextEditor::outlineColourId, outline);
-        log.setText ("Drop a sample from Live's browser or Finder onto a pad: what arrives shows here and in ~/Library/Logs/DrumChimp/spike.log.\n");
-        addAndMakeVisible (log);
-
-        setSize (720, 440);
-        startTimerHz (10);
-        timerCallback();
+        setSize (780, 430);
+        select (0);
+        startTimerHz (30);
     }
 
     DrumChimpEditor::~DrumChimpEditor()
     {
         stopTimer();
+        setLookAndFeel (nullptr);
+    }
+
+    void DrumChimpEditor::select (int pad)
+    {
+        selected = juce::jlimit (0, numPads - 1, pad);
+        for (size_t i = 0; i < knobs.size(); ++i)
+        {
+            knobAttachments[i].reset();
+            knobAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+                processor.state, params::padID (selected, knobs[i].id), knobs[i].slider);
+        }
+        chokeAttachment.reset();
+        chokeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (processor.state, params::padID (selected, "choke"), choke);
+        muteAttachment.reset();
+        muteAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, params::padID (selected, "mute"), mute);
+        soloAttachment.reset();
+        soloAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, params::padID (selected, "solo"), solo);
+        refreshPads();
+    }
+
+    void DrumChimpEditor::refreshPads()
+    {
+        seenKit = processor.kitVersion();
+        seenMap = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
+        for (int i = 0; i < numPads; ++i)
+            pads[(size_t) i]->refresh (i == selected, seenMap);
+
+        const auto s = processor.padSource (selected);
+        padTitle.setText ("Pad " + juce::String (selected + 1) + " · " + defaultRoles[(size_t) selected], juce::dontSendNotification);
+        padSample.setText (s.message.isNotEmpty() ? s.message : s.path.isNotEmpty() ? s.path : juce::String ("Empty: drop a sample on the pad, or Load..."),
+                           juce::dontSendNotification);
+        padSample.setColour (juce::Label::textColourId, s.message.isNotEmpty() ? warning : dim);
+        clearButton.setEnabled (s.status != Status::empty);
+    }
+
+    void DrumChimpEditor::chooseSample()
+    {
+        const auto current = processor.padSource (selected).path;
+        chooser = std::make_unique<juce::FileChooser> ("Choose a sample for pad " + juce::String (selected + 1),
+                                                       current.isNotEmpty() ? juce::File (current).getParentDirectory() : juce::File(),
+                                                       audioFileTypes().joinIntoString (";"));
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this, pad = selected] (const juce::FileChooser& fc)
+        {
+            if (const auto file = fc.getResult(); file.existsAsFile())
+                processor.loadSample (pad, file);
+        });
+    }
+
+    void DrumChimpEditor::timerCallback()
+    {
+        const auto map = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
+        if (processor.kitVersion() != seenKit || map != seenMap)
+            refreshPads();
+
+        const auto played = processor.takeHits();
+        for (int i = 0; i < numPads; ++i)
+        {
+            if ((played & (1u << i)) != 0)
+                pads[(size_t) i]->hit();
+            else
+                pads[(size_t) i]->fade();
+        }
+
+        const auto s = processor.status();
+        status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
+                            + juce::String (s.ppq, 2) + " · notes in " + juce::String (s.notesIn) + ", out " + juce::String (s.notesOut),
+                        juce::dontSendNotification);
     }
 
     void DrumChimpEditor::paint (juce::Graphics& g)
@@ -116,77 +291,52 @@ namespace drumchimp
         g.setColour (text);
         g.setFont (font (18.0f, true));
         g.drawText ("DrumChimp", 16, 12, 200, 28, juce::Justification::centredLeft);
-        g.setColour (dim);
-        g.setFont (font (12.5f));
-        g.drawText ("Phase 0 spikes", 130, 12, 200, 28, juce::Justification::centredLeft);
+
+        auto panelArea = getLocalBounds().reduced (16).withTrimmedTop (44).withTrimmedBottom (26).withTrimmedLeft (436);
+        g.setColour (panel);
+        g.fillRoundedRectangle (panelArea.toFloat(), 6.0f);
     }
 
     void DrumChimpEditor::resized()
     {
         auto r = getLocalBounds().reduced (16);
         auto top = r.removeFromTop (28);
-        top.removeFromLeft (250);
-        dragHandle.setBounds (top.removeFromRight (150));
+        dragHandle.setBounds (top.removeFromRight (140));
         top.removeFromRight (10);
-        source.setBounds (top.removeFromRight (140));
-        r.removeFromTop (14);
+        noteMap.setBounds (top.removeFromRight (110));
+        top.removeFromRight (8);
+        source.setBounds (top.removeFromRight (120));
+        r.removeFromTop (16);
+        status.setBounds (r.removeFromBottom (20));
+        r.removeFromBottom (6);
 
-        auto padArea = r.removeFromLeft (400).removeFromTop (180);
+        auto padArea = r.removeFromLeft (420);
         const int w = padArea.getWidth() / 4, h = padArea.getHeight() / 2;
         for (int i = 0; i < numPads; ++i)
-            pads[(size_t) i].setBounds (juce::Rectangle<int> (padArea.getX() + (i % 4) * w, padArea.getY() + (i / 4) * h, w, h).reduced (4));
-        r.removeFromLeft (16);
-        status.setBounds (r.removeFromTop (180));
-        auto bottom = getLocalBounds().reduced (16);
-        log.setBounds (bottom.removeFromBottom (bottom.getHeight() - 236));
-    }
+            pads[(size_t) i]->setBounds (padArea.getX() + (i % 4) * w, padArea.getY() + (i / 4) * h, w, h);
 
-    void DrumChimpEditor::timerCallback()
-    {
-        const auto s = processor.status();
-        const auto mode = (DrumChimpProcessor::Source) juce::roundToInt (processor.state.getRawParameterValue ("source")->load());
-        status.setText ("Host: " + processor.hostDescription
-                        + "\nTransport: " + juce::String (s.playing ? "playing" : "stopped")
-                        + "  " + juce::String (s.bpm, 1) + " BPM  beat " + juce::String (s.ppq, 2)
-                        + "\nSource: " + juce::String (mode == DrumChimpProcessor::Source::generator ? "Generator" : "MIDI In")
-                        + "\nNotes in: " + juce::String (s.notesIn)
-                        + "\nNotes out: " + juce::String (s.notesOut)
-                        + "\nTransport jumps: " + juce::String (s.jumps)
-                        + "\nInstance ID: " + juce::String (juce::roundToInt (processor.state.getRawParameterValue ("instance")->load())),
-                        juce::dontSendNotification);
-    }
+        auto panelArea = r.withTrimmedLeft (16).reduced (14, 12);
+        auto titleRow = panelArea.removeFromTop (24);
+        clearButton.setBounds (titleRow.removeFromRight (60));
+        titleRow.removeFromRight (6);
+        loadButton.setBounds (titleRow.removeFromRight (70));
+        padTitle.setBounds (titleRow);
+        padSample.setBounds (panelArea.removeFromTop (40));
+        panelArea.removeFromTop (8);
 
-    int DrumChimpEditor::padAt (int x, int y) const
-    {
-        for (int i = 0; i < numPads; ++i)
-            if (pads[(size_t) i].getBounds().contains (x, y))
-                return i;
-        return -1;
-    }
-
-    void DrumChimpEditor::report (const juce::String& line)
-    {
-        DrumChimpProcessor::logSpike (line);
-        log.moveCaretToEnd();
-        log.insertTextAtCaret (line + "\n");
-    }
-
-    void DrumChimpEditor::filesDropped (const juce::StringArray& files, int x, int y)
-    {
-        const int pad = padAt (x, y);
-        const juce::String where = pad >= 0 ? "pad " + juce::String (pad + 1) : "outside the pads";
-        for (const auto& f : files)
+        auto knobRow = panelArea.removeFromTop (110);
+        const int kw = knobRow.getWidth() / (int) knobs.size();
+        for (auto& k : knobs)
         {
-            const juce::File file (f);
-            report ("file drop on " + where + ": " + f + (file.existsAsFile() ? " (" + juce::String (file.getSize()) + " bytes)" : " (not a file)"));
+            auto cell = knobRow.removeFromLeft (kw);
+            k.label.setBounds (cell.removeFromTop (16));
+            k.slider.setBounds (cell);
         }
-        if (pad >= 0 && ! files.isEmpty())
-            pads[(size_t) pad].setButtonText (juce::String (padNames[(size_t) pad]) + "\n" + juce::File (files[0]).getFileNameWithoutExtension());
-    }
-
-    void DrumChimpEditor::textDropped (const juce::String& dropped, int x, int y)
-    {
-        const int pad = padAt (x, y);
-        report ("text drop on " + (pad >= 0 ? "pad " + juce::String (pad + 1) : juce::String ("outside the pads")) + ": " + dropped.substring (0, 400));
+        panelArea.removeFromTop (12);
+        auto bottomRow = panelArea.removeFromTop (26);
+        choke.setBounds (bottomRow.removeFromLeft (90));
+        bottomRow.removeFromLeft (16);
+        mute.setBounds (bottomRow.removeFromLeft (70));
+        solo.setBounds (bottomRow.removeFromLeft (70));
     }
 }

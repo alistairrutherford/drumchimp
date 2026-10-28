@@ -4,9 +4,10 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 0 (feasibility spikes) is done: all five pass in Live 12.4.7 (PLAN.md §10). The
-plug-in plays a fixed test pattern on synthesised placeholder sounds; dropping a sample on a pad
-only changes its label until the sampler arrives in Phase 1.
+**Status:** Phase 1 is done (PLAN.md §10): eight sampler pads with Level, Pan, Tune, Decay,
+Velocity, Choke, Mute and Solo; drop a sample from Live's browser or Finder on a pad, or use
+Load…. A new instance starts with the Core Library's 909 kit. The pattern generator is still the
+Phase 0 test pattern (Source: Generator), and there's no library browser or Randomise yet.
 
 ## Install
 
@@ -23,13 +24,14 @@ Restart Live afterwards: Live keeps a plug-in's old binary loaded until it quits
 
 ```sh
 Tests/run_tests.sh            # core tests (no JUCE)
+Tests/run_host_tests.sh       # processor tests (JUCE console app): loading, timing, state, no allocation
 Tests/run_validation.sh       # pluginval strictness 10 on the installed VST3
 Tools/scan_library.sh         # spike (d): time a scan of the Ableton library (--csv FILE for the list)
 ```
 
 ## Phase 0 spikes
 
-DrumChimp writes what it sees to `~/Library/Logs/DrumChimp/spike.log`. Results are in PLAN.md §10.
+The Phase 0 build logged what it saw to `~/Library/Logs/DrumChimp/spike.log` (later builds don't). Results are in PLAN.md §10.
 
 | Spike | How it's checked |
 |---|---|
