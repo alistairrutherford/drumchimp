@@ -4,15 +4,18 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 3 is done (PLAN.md §10).
-- **Kits:** **Randomise kit** builds an 8-pad kit from your Ableton library: one family (808, 909,
-  Acoustified, …) at *Matched*, anything of each role at *Wild*. Lock pads to keep them, roll one
-  pad with its dice, and Undo/Redo the last 20 kits. Save and load kits from the *Kits* menu.
-- **Browser:** filtered to the selected pad's role, and searchable. Click a sample to hear it;
-  double-click it, or drag it onto a pad, to load it. Drops from Live's browser and Finder work too.
-- **Pads:** each has a role, plus Level, Pan, Tune, Decay, Velocity, Choke, Mute and Solo.
-- **Saved sets:** a sample that moved since the set was saved is found again in the library.
-- **Not yet:** the pattern generator is still the Phase 0 test pattern (Phase 4).
+**Status:** Phase 4 is done (PLAN.md §10).
+- **Patterns:** ten styles (Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass,
+  Breakbeat, Reggae). Set Bars, Density, Complexity, Swing, Humanise, Ghost notes and Fill.
+  Generate makes a new pattern; changing a setting remakes this one.
+- **Step grid:** click a step to edit it, and lock a lane to keep it.
+- **Playback and MIDI:** with Source on *Generator*, the pattern plays the pads in time with
+  Live and goes to MIDI out, for another track's *MIDI From*. *Drag MIDI* drops the pattern on a
+  clip slot.
+- **Kits:** Randomise builds 8-pad kits (leaning toward the style's families: 808 for Trap, 909
+  for House…) with locks, dice and undo, and the browser previews and loads samples.
+- **Ableton Packs:** samples in installed Packs are protected (only Live can play them), so
+  DrumChimp uses the Core Library, your User Library and your own folders.
 
 ## Install
 
@@ -49,7 +52,7 @@ The Phase 0 build logged what it saw to `~/Library/Logs/DrumChimp/spike.log` (la
 ### By hand in Live (b and c)
 
 1. Put DrumChimp on a MIDI track and open its window.
-2. **(b)** Drag the **Drag 4-bar MIDI** handle onto an empty clip slot on **DrumChimp's own track**.
+2. **(b)** Drag the **Drag MIDI** handle (in Phase 0: *Drag 4-bar MIDI*) onto an empty clip slot on **DrumChimp's own track**.
    Then try the Arrangement on the same track. Expected: a 4-bar clip with the test pattern (kick,
    snare, hats, an open hat, a tom pickup, a crash on each bar's one).
 3. Set **Source** to *MIDI In* and launch the clip. Expected: the pads play from the clip, and

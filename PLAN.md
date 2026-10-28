@@ -63,13 +63,22 @@ Mostly learned from Chordism, ChordChimp and NoteCap:
 5. **Drag-and-drop works both ways.** Live accepts a `.mid` file dragged from a plug-in window
    onto a clip slot or the Arrangement (ChordChimp's export drag-out does this). Plug-in windows
    can accept files dragged from Live's browser. Both get checked again in Phase 0.
+6. **Samples in installed Packs are protected (found in Phase 4).** Every sample in
+   `~/Music/Ableton/Factory Packs` is an AIFC file with an `able` chunk. Its header reads, but its
+   audio can only be decoded by Live; macOS's own `afinfo` can't open it either. The Core
+   Library's samples, the User Library and the user's own folders are ordinary files.
+   - DrumChimp leaves Pack samples out of its library and counts them.
+   - If one is dropped on a pad, DrumChimp says why it can't load.
+
+   So the drums DrumChimp can use from Ableton's own library are the Core Library's (2,439 on
+   this Mac). Pack sounds would only be usable by exporting them from Live as new audio.
 
 ### Where the samples are (on this Mac)
 
 | Location | Path | Drum one-shots |
 |---|---|---|
 | Core Library | `/Applications/Ableton Live 12 Standard.app/Contents/App-Resources/Core Library/Samples/` | ~2,550 (`One Shots/Drums/<Role>/`, `Multisamples/Drum Machines/808, 909, …`) |
-| Factory Packs | `~/Music/Ableton/Factory Packs/<Pack>/Samples/` | ~1,490 (mostly *Drum Essentials* `Samples/Drums/<Role>/`) |
+| Factory Packs | `~/Music/Ableton/Factory Packs/<Pack>/Samples/` | ~1,490, **protected: only Live can play them** (§2, point 6) |
 | User Library | `~/Music/Ableton/User Library/Samples/` | 0 for now |
 | Drum Rack presets | `*.adg` in packs and the Core Library | ~300 (Phase 7: curated kits) |
 
@@ -207,28 +216,51 @@ test set.
 
 ### 3.4 Pattern generator
 
-Every style is a data file (`Resources/styles/*.json`), so adding a style needs no code. A
-style describes:
+*As built in Phase 4* (`Source/core/pattern/`).
 
-- its grid (16ths, or 8th-note triplets for shuffle and swing styles), and a default swing;
-- per role and per step: a **probability**, a base **velocity** and **accent** flags. These
-  come from the style's core groove and its variations;
-- **rules** that must always hold: anchors (House: kick on every beat; Rock and Pop: snare on 2
-  and 4; Reggae one-drop: kick and snare on 3), rules that stop roles clashing, and the hat
-  choke;
-- **fill** templates, mostly toms and snare, in the last half-bar or bar.
+**Styles are text**, not code. They live in `FactoryStyles.h`, in the format that `Style.h`
+documents: a name, tempo, grid, default swing, the kit families the style likes, the fill
+(none, toms or snare), crash on the one or only after fills, and lanes like
+`kick = X... X... X... X...`. Lanes can span one or more bars. The step symbols are:
 
-**Controls:** Style, Bars (1 / 2 / 4 / 8), Density, Complexity (how far it moves from the core
-groove), Swing, Humanise (timing ±ms and velocity spread), Ghost notes, Fill (Off / every 4 /
-every 8 bars), Seed, and **Generate**. Each lane has a **lock**: Generate leaves a locked lane
-as it is (for example, keep the kick and re-roll the hats).
+- `X` anchor: always plays, accented
+- `x` core: thins out only at low Density
+- `o` variation: more likely with Complexity
+- `g` ghost note: only with Ghost notes on
+- `r` core, and may roll 2 or 3 times with Complexity
+- `.` rest. An `extras` lane may still gain hits on rests at high Complexity.
 
-**Styles for v1 (10):** Rock, Pop, Funk, Hip-Hop (boom bap), Trap, House, Techno, Drum & Bass,
-Breakbeat, Reggae (one-drop). **Next:** Shuffle/Blues, Jazz swing, Bossa nova, Afrobeat,
-Garage/2-step, Dembow.
+**The generator** is a pure function of the style, settings, pad roles and seed, run on the
+message thread:
 
-Generation is a pure function, `(style, params, seed) → Pattern`. It runs on the message
-thread. The finished `Pattern` is passed to the audio thread through a lock-free swap.
+- **Probabilities:** each step's chance of playing grows with Density and Complexity.
+- **Fixed draws:** every step draws its random numbers in a fixed order, so the same seed gives
+  the same pattern. More Density only ever adds hits, and so does more Complexity (with fills
+  off).
+- **Pads:** a lane plays on every pad with its role. With no such pad, ride falls back to the
+  closed hats, rim to the snare, and any tom to any tom.
+- **Humanise:** up to ±14 velocity and ±12 ms timing, rounded to 0.1 ms so it saves exactly.
+- **Fills:** in every 2nd, 4th or 8th bar (Fill), the last beat becomes a fill (the last two at
+  Complexity > 0.6). Toms run high → low, or the snare builds and may roll. A crash follows on
+  the next bar's one.
+- **Locks:** a locked lane keeps its hits.
+
+**Controls** (parameters): Style, Bars (1 / 2 / 4 / 8), Density, Complexity, Swing (50–75%,
+applied as it plays; a new style brings its own), Humanise, Ghost notes, Fill (Off / every 2, 4
+or 8 bars).
+- Changing any of them, or a pad's role, makes the pattern again with the same seed.
+- **Generate** picks a new seed.
+- Clicking a step in the grid toggles it. Hand edits last until the next change of setting.
+  Lane locks keep a lane.
+
+**Styles (10):** Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass, Breakbeat,
+Reggae. **Next:** Shuffle/Blues, Jazz swing and Bossa nova (the 12-step grid is parsed and
+played, but no factory style uses it yet), Afrobeat, Garage/2-step, Dembow.
+
+**Playback:** the pattern reaches the audio thread whole, through `Handoff`. It loops from the
+song's bar 1. Swing delays the second sixteenth of each eighth. Every event goes on the first
+sample at or after its time. A new pattern, a stop or a jump ends what's sounding. Style-aware
+kits (§3.3): the style's families are three times as likely when Randomise chooses one.
 
 ### 3.5 Playback: where the notes come from
 
@@ -450,6 +482,8 @@ The sampler and pads. Dropping a sample on a pad now loads and plays it.
 
 The library scanner and the classifier (§3.2 describes them as built).
 
+- *(Phase 4 found that the 1,725 Factory Pack samples in these counts are protected: only Live
+  can play them. They're now left out: 2,439 playable drums.)*
 - **G2, finding the library:** the roots come from `Library.cfg` and the app (9 on this Mac). A
   cold scan with every header read takes 0.5–0.9 s; a warm one from the cache takes 0.3 s. The
   target was under 10 s. One scan is shared by every instance (`SharedResourcePointer`); the
@@ -513,5 +547,56 @@ Kits: §3.3 describes them as built.
   200 Matched kits weren't one family until tags came first.
 - **Not yet checked in Live:** Live still has the Phase 1 build loaded.
 
-**Next:** Phase 4, patterns. The style library, the pattern generator, the sequencer synced to
-the host, and the step grid.
+### Phase 4 (2026-10-28, Live 12.4.7): done, G7 passes
+
+Patterns: §3.4 describes them as built.
+
+- **G7:**
+  - **Ten styles:** Rock, Pop, Funk, Hip-Hop, Trap, House, Techno, Drum & Bass, Breakbeat,
+    Reggae.
+  - **Anchors:** every style's anchors play in every bar over 200 seeds × 9 Density/Complexity
+    settings. Named checks: House's kick on every beat, Rock's snare on 2 and 4, Reggae's one
+    drop (kick on 3, never on 1).
+  - **Seeds:** the same seed gives the same pattern.
+  - **Settings:** more Density only adds hits (10 styles × 100 seeds × 11 steps), and so does
+    more Complexity.
+  - **Fills:** only where asked, with a crash after.
+- **The sequencer, on the grid:**
+  - **Fake transport:** with House at Humanise 50%, every note-on landed on its exact sample
+    through a steady run, a loop back to bar 1 and a tempo change (120 → 97 BPM).
+  - **Block sizes 1–4096:** with rolls, swing and humanise, every hit plays once, never early.
+  - **In Live:** House recorded through *MIDI From* at 124 BPM had the kick on every beat, the
+    clap on 2 and 4, open hats on the off-beats and swung sixteenths at 0.27 beats (54%), each
+    within a sample.
+- **The drag-out** is now the pattern itself (Bars long, with swing and humanise), not the
+  Phase 0 test pattern, which is gone.
+- **The pattern goes with the set** as it is: hand edits and lane locks included, and not remade
+  from its settings on load.
+- **Editor** (960 × 760): pattern controls under the pads (Style, Bars, Fill, Generate, Density,
+  Complexity, Swing, Humanise, Ghost notes), and a step grid across the bottom. The grid shows
+  velocity as brightness, rolls as dots and the playhead; click a step to toggle it, and each
+  lane has a lock.
+- **Found on the way:**
+  - **Pack samples are protected (§2, point 6).** A host test failed now and then: a moved
+    sample was found in the library but wouldn't load. The cause was the Pack samples, which
+    only Live can decode. In Phases 2 and 3 they were in the index, so Randomise and the browser
+    could offer them. Fixed:
+    - the header reader spots them;
+    - the scan leaves them out (1,725 here) and counts them in the status line's tooltip, with
+      the cache format bumped to 2;
+    - a dropped one says why it can't load;
+    - a new host test checks that every sample from 10 Randomise kits actually loads.
+
+    The library is now 2,439 playable drums, all Core Library. Matched kits still come out as
+    one family (an RKTD kit, a 606 kit).
+  - **Relocation and copies:** two identical copies of a sample in two places no longer count
+    as a guess when finding a missing sample.
+  - **Exact saving:** humanise offsets are rounded to 0.1 ms, so a saved pattern restores
+    exactly.
+- **Tests:** `test_pattern` (style parsing, invariants, determinism, monotonic Density and
+  Complexity, fills, locks, fallbacks, playback timing, swing, the loop point, MIDI, Handoff).
+  The host generator test was rewritten as above. `pluginval` strictness 10 passes.
+
+**Next:** Phase 5, into Live: the MIDI export drag-out exists already. What's left is checking
+the drag-out by hand in Live, the *MIDI From* route (already exact), and a DrumChimpBridge for
+tests in Live.

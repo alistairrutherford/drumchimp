@@ -51,13 +51,32 @@ namespace
         { std::ofstream (pack / "Samples/Drums/Kick/Kick One.wav.asd") << "analysis"; }
         { std::ofstream (pack / "Samples/Drums/Kick/readme.txt") << "text"; }
         { std::ofstream (pack / "Samples/Drums/Kick/Broken.wav") << "not audio"; }
+        {
+            // An Ableton Pack sample: protected, only Live plays it.
+            std::ofstream out (pack / "Samples/Drums/Snare/Snare Protected.aif", std::ios::binary);
+            const auto be = [&] (uint32_t v, int n) { for (int i = n - 1; i >= 0; --i) out.put ((char) ((v >> (8 * i)) & 0xff)); };
+            out << "FORM";
+            be (0, 4);
+            out << "AIFC" << "able";
+            be (2, 4);
+            out.put (0);
+            out.put (0);
+            out << "COMM";
+            be (18, 4);
+            be (1, 2);
+            be (4410, 4);
+            be (16, 2);
+            for (const int b : { 0x40, 0x0e, 0xac, 0x44, 0, 0, 0, 0, 0, 0 })
+                out.put ((char) b);
+        }
         const std::vector<LibraryRoot> roots { { LibraryRoot::Kind::pack, "My Pack", pack.string() } };
 
         std::cout << "Scan\n";
         LibraryCache cache;
         ScanStats stats;
         auto samples = scanLibrary (roots, cache, stats);
-        check (stats.files == 8, "8 audio files found (.asd and .txt skipped): " + std::to_string (stats.files));
+        check (stats.files == 9, "9 audio files found (.asd and .txt skipped): " + std::to_string (stats.files));
+        check (stats.protectedFiles == 1, "the protected pack sample is left out, and counted");
         check (stats.skippedLoops == 1, "the loop skipped");
         check (stats.unreadable == 1, "the broken file reported");
         check (samples.size() == 5, "5 samples listed (the 45 s one isn't): " + std::to_string (samples.size()));
@@ -77,7 +96,7 @@ namespace
         check (reread.read (cacheFile) && reread.entries.size() == cache.entries.size(), "read back: " + std::to_string (reread.entries.size()) + " entries");
         ScanStats again;
         samples = scanLibrary (roots, reread, again);
-        check (again.headersRead == 1 && again.fromCache == 6, "a second scan reads no headers but the broken file's ("
+        check (again.headersRead == 1 && again.fromCache == 7 && again.protectedFiles == 1, "a second scan reads no headers but the broken file's ("
                                                                    + std::to_string (again.headersRead) + " read, " + std::to_string (again.fromCache) + " cached)");
 
         std::this_thread::sleep_for (std::chrono::milliseconds (20));

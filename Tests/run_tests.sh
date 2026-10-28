@@ -27,3 +27,4 @@ compile_and_run test_sampler
 compile_and_run test_classifier
 compile_and_run test_library
 compile_and_run test_kit
+compile_and_run test_pattern

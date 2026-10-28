@@ -1,10 +1,11 @@
-// The plug-in's parameters (PLAN.md §3.1): eight per pad, then four global ones.
+// The plug-in's parameters (PLAN.md §3.1, §3.4): eight per pad, then the global ones.
 //
 //   pN_level   dB, −60 (off) … +6           pN_decay   10 ms … 10 s, the top is "Full"
 //   pN_pan     L100 … C … R100              pN_vel     velocity sensitivity, 0 … 100%
 //   pN_tune    −24 … +24 semitones          pN_choke   None, A, B, C, D (hats share A)
 //   pN_mute, pN_solo
 //   character  Randomise: Matched (one family) … Wild
+//   style, bars, density, complexity, swing (50–75%), humanise, ghosts, fill   the pattern
 //   source     Generator (the test pattern plays and goes to MIDI out) or MIDI In
 //   notemap    GM or Chromatic
 //   instance   Instance ID, random per instance (PLAN.md §3.6, route C)
@@ -29,11 +30,13 @@ namespace drumchimp::params
         PadSettingsArray padSettings() const noexcept;
         NoteMap noteMap() const noexcept;
         bool generatorOn() const noexcept;
+        double swingAmount() const noexcept;
 
     private:
         struct Pad { std::atomic<float>* level, *pan, *tune, *decay, *vel, *choke, *mute, *solo; };
         std::array<Pad, numPads> pads {};
         std::atomic<float>* source = nullptr;
+        std::atomic<float>* swing = nullptr;
         std::atomic<float>* noteMapParam = nullptr;
     };
 }

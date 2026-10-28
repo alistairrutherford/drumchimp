@@ -1,7 +1,7 @@
-// The editor (PLAN.md §5), Phase 3.
+// The editor (PLAN.md §5), Phase 4.
 //
 //   Header      Source (Generator / MIDI In), Note map (GM / Chromatic), and the drag handle:
-//               4 bars of the test pattern as a .mid to drop on a clip slot
+//               the pattern as a .mid to drop on a clip slot
 //   Kit bar     Randomise kit, Undo, Redo, Character (Matched … Wild), the family Randomise chose,
 //               and Kits (save the kit as a preset, load one)
 //   Pads        eight pads with their role and sample, a lock and a dice. Click to select and play
@@ -11,6 +11,10 @@
 //               a sample to hear it; double-click it, or drag it onto a pad, to load it.
 //   Pad panel   the selected pad: its role, its sample (Load…, Clear), Level, Pan, Tune, Decay,
 //               Velocity, Choke, Mute and Solo
+//   Pattern     Style, Bars, Fill, Ghost notes, Generate (a new seed), and Density, Complexity,
+//               Swing and Humanise
+//   Step grid   the pattern: a lane per pad, velocity as brightness, rolls as dots, the playhead.
+//               Click a step to add or remove a hit; lock a lane to keep it through Generate.
 //   Status      transport, notes in and out; the library scan
 #pragma once
 
@@ -85,6 +89,27 @@ namespace drumchimp
         float flash = 0.0f;
     };
 
+    // The pattern, a lane per pad.
+    class StepGrid : public juce::Component
+    {
+    public:
+        explicit StepGrid (DrumChimpProcessor& p);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void refresh();                    // the pattern, the locks or the pads' roles changed
+        void setPlayhead (int step);
+
+    private:
+        juce::Rectangle<int> cellArea() const;
+
+        DrumChimpProcessor& processor;
+        Pattern pattern;
+        std::vector<std::unique_ptr<IconButton>> locks;
+        int playhead = -1;
+        static constexpr int labelWidth = 92;
+    };
+
     // The library, filtered, as a list. Click: hear it. Double-click: load it into the selected pad.
     // Drag: onto any pad.
     class Browser : public juce::Component,
@@ -138,6 +163,7 @@ namespace drumchimp
         void chooseSample();
         void showKitsMenu();
         void saveKit();
+        void setUpKnob (Knob& k, const char* name);
 
         DrumChimpProcessor& processor;
         juce::LookAndFeel_V4 lookAndFeel;
@@ -169,10 +195,20 @@ namespace drumchimp
         std::unique_ptr<juce::FileChooser> chooser;
         std::unique_ptr<juce::AlertWindow> saveWindow;
 
+        juce::ComboBox style, bars, fill;
+        juce::ToggleButton ghosts { "Ghost notes" };
+        juce::TextButton generate { "Generate" };
+        std::array<Knob, 4> patternKnobs {{ { {}, {}, "density" }, { {}, {}, "complexity" }, { {}, {}, "swing" }, { {}, {}, "humanise" } }};
+        std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, 4> patternKnobAttachments;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> styleAttachment, barsAttachment, fillAttachment;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ghostsAttachment;
+        StepGrid grid;
+        juce::uint32 seenPattern = ~0u;
+
         juce::Label status, libraryStatus;
         juce::uint32 seenKit = ~0u, seenLibrary = ~0u;
         NoteMap seenMap = NoteMap::gm;
-        juce::Rectangle<int> padPanelArea, browserArea;
+        juce::Rectangle<int> padPanelArea, browserArea, patternArea;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DrumChimpEditor)
     };

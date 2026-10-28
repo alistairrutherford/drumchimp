@@ -1,4 +1,5 @@
 #include "SampleLoader.h"
+#include "../core/library/AudioHeader.h"
 
 namespace drumchimp
 {
@@ -34,6 +35,11 @@ namespace drumchimp
         if (! file.existsAsFile())
         {
             error = "Missing: " + file.getFullPathName();
+            return {};
+        }
+        if (readAudioHeader (file.getFullPathName().toStdString()).protectedFile)
+        {
+            error = file.getFileName() + " is from an Ableton Pack. Packs' samples are protected: only Live can play them";
             return {};
         }
         const std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));

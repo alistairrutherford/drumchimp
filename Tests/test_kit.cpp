@@ -134,6 +134,17 @@ namespace
         check (kept, "locked pads never change");
         check (towardLocked > 60, "locked 808s pull Matched kits to 808 (" + std::to_string (towardLocked) + "/100)");
 
+        KitRequest styled;
+        styled.character = 0.0f;
+        styled.preferredFamilies = { "acoustic" };
+        int towardStyle = 0;
+        for (int seed = 1; seed <= 100; ++seed)
+        {
+            styled.seed = (uint64_t) seed;
+            towardStyle += buildKit (index, styled).family == "acoustic" ? 1 : 0;
+        }
+        check (towardStyle > 60, "a style's families pull Matched kits to them (" + std::to_string (towardStyle) + "/100)");
+
         // One pad's dice: everything else locked.
         KitRequest dice = request;
         dice.locked.fill (true);
@@ -193,6 +204,8 @@ namespace
             make ("Core Library", "Kick 909 2", Role::kick, {}, TomRange::unknown, 5000),
             make ("Pack C", "Snare Dup", Role::snare, {}, TomRange::unknown, 10),
             make ("Pack D", "Snare Dup", Role::snare, {}, TomRange::unknown, 20),
+            make ("Pack E", "Clap Shared", Role::clap, {}, TomRange::unknown, 30),
+            make ("Pack F", "Clap Shared", Role::clap, {}, TomRange::unknown, 30),
         };
         const LibraryIndex index (std::move (all));
         const auto* moved = relocate (index, "/Applications/Ableton Live 12 Suite.app/Core Library/Drums/Kick 909 2.wav", 5000);
@@ -201,6 +214,8 @@ namespace
         check (bySize != nullptr && bySize->root == "Pack D", "two with the same name: the one with the saved size");
         check (relocate (index, "/old/place/Drums/Snare Dup.wav", 0) == nullptr, "two equally good: no guess");
         check (relocate (index, "/old/Other.wav", 5000) == nullptr, "a name the library hasn't got: not found");
+        check (relocate (index, "/old/Drums/Clap Shared.wav", 30) != nullptr, "two copies of the same file (same name and saved size): either will do");
+        check (relocate (index, "/old/Drums/Clap Shared.wav", 0) == nullptr, "but with no saved size, still no guess");
     }
 }
 

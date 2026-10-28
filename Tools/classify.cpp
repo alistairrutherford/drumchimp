@@ -64,7 +64,8 @@ int main (int argc, char** argv)
 
     std::cout << std::fixed << std::setprecision (0)
               << "\nScan, cold: " << cold.milliseconds << " ms (" << cold.files << " audio files, " << cold.headersRead << " headers read, "
-              << cold.skippedLoops << " loops skipped, " << cold.unreadable << " unreadable)\n"
+              << cold.skippedLoops << " loops skipped, " << cold.unreadable << " unreadable, " << cold.protectedFiles
+              << " protected pack samples left out)\n"
               << "Scan, warm: " << warm.milliseconds << " ms (" << warm.headersRead << " headers read, " << warm.fromCache << " from the cache)\n"
               << "\n" << index.size() << " samples, " << index.drums() << " drums:\n";
     for (int r = 0; r < numRoles; ++r)

@@ -22,7 +22,7 @@ namespace drumchimp
         struct Status
         {
             bool scanning = false;
-            size_t samples = 0, drums = 0, roots = 0;
+            size_t samples = 0, drums = 0, roots = 0, protectedFiles = 0;   // protected: Ableton Pack samples, which only Live can play
             double milliseconds = 0.0;
         };
 

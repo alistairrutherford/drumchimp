@@ -4,7 +4,10 @@
 //   1. Samples   WAV files (written here) load on the loader thread into their pads; a note on a
 //                pad's note plays it on its exact sample, at the sample's level; the Chromatic note
 //                map moves the pads; Clear empties a pad; an unreadable file is reported
-//   2. Generator with a fake transport, the test pattern plays the pads and goes to MIDI out
+//   2. Generator a style's pattern plays the pads and goes to MIDI out, every note on its sample
+//                through a steady run, a loop and a tempo change; settings remake it, Generate
+//                renews it, a locked lane stays, a step toggles, the drag-out matches it, and it
+//                is saved with the set
 //   3. State     sample paths and settings survive getState → setState into a new instance (the
 //                Instance ID too); a missing sample shows as missing and leaves its pad silent
 //   4. RT safety no allocation in processBlock (a malloc hook counts them on this thread) while
@@ -22,6 +25,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../../Source/plugin/DrumChimpProcessor.h"
 #include <iostream>
+#include <set>
 #include <pthread.h>
 
 using namespace drumchimp;
@@ -194,6 +198,19 @@ namespace
         check (b.audio.getMagnitude (0, 512) < 1.0e-6f, "a cleared pad is silent");
     }
 
+    // Note-ons the pattern should send over [from, to) beats, each with the first sample at or after it.
+    std::multiset<std::pair<juce::int64, int>> expectedOns (const Pattern& pattern, double from, double to, double swing, double bpm, double rate)
+    {
+        std::multiset<std::pair<juce::int64, int>> out;
+        const double bps = bpm / 60.0 / rate;
+        pattern::forEachEvent (pattern, from, to, swing, bpm, [&] (double beat, int pad, uint8_t, bool on)
+        {
+            if (on)
+                out.insert ({ (juce::int64) std::ceil ((beat - from) / bps - 1.0e-6), pad });
+        });
+        return out;
+    }
+
     void testGenerator (const Files& f)
     {
         std::cout << "2. Generator\n";
@@ -202,32 +219,130 @@ namespace
         for (int pad = 0; pad < numPads; ++pad)
             p.loadSample (pad, f.click);
         check (waitFor ([&] { return allSettled (p); }), "a click on every pad");
+        setParam (p, "style", 5.0f);                   // House
+        setParam (p, "humanise", 0.5f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);   // the timer remakes the pattern
+        const auto pattern = p.currentPattern();
+        const double swing = p.state.getRawParameterValue ("swing")->load();
+        check (std::abs (swing - 0.54) < 0.001, "choosing House brings its swing (54%)");
+        for (const int beat : { 0, 4, 8, 12 })
+            check (pattern.lanes[0][(size_t) beat].velocity > 0, "House: kick on step " + juce::String (beat));
+
         FakePlayHead head;
         head.info.setIsPlaying (true);
-        head.info.setBpm (120.0);
         p.setPlayHead (&head);
-
         Block b;
-        int notesOut = 0, firstNote = -1;
-        float peak = 0.0f;
-        double ppq = 0.0;
-        for (int i = 0; i < 200; ++i)                  // 200 blocks of 512 at 48 kHz: 2.1 s, a bar at 120 BPM
+
+        // Three runs through the transport: steady, a loop back to bar 1 halfway, and a tempo change.
+        // Every note-on must land where the pattern says, sample for sample.
+        struct Run { const char* what; double bpm1, bpm2; double loopAt; };
+        for (const Run scenario : { Run { "steady at 120 BPM", 120.0, 120.0, -1.0 }, Run { "looping from beat 6 back to 0", 120.0, 120.0, 6.0 },
+                               Run { "120 BPM, then 97 BPM from beat 4", 120.0, 97.0, -1.0 } })
         {
-            head.info.setPpqPosition (ppq);
-            run (p, b);
-            for (const auto meta : b.midi)
-                if (meta.getMessage().isNoteOn())
+            std::multiset<std::pair<juce::int64, int>> want, got;
+            double ppq = 0.0;
+            juce::int64 sample = 0, segmentStart = 0;
+            double segmentBeat = 0.0, tempo = scenario.bpm1;
+            bool switched = false;
+            for (int i = 0; i < 400; ++i)
+            {
+                if (scenario.loopAt > 0.0 && ppq >= scenario.loopAt && ! switched)
                 {
-                    if (notesOut++ == 0)
-                        firstNote = meta.getMessage().getNoteNumber();
+                    for (const auto& e : expectedOns (pattern, segmentBeat, ppq, swing, tempo, 48000.0))
+                        want.insert ({ segmentStart + e.first, e.second });
+                    ppq = 0.0;
+                    segmentStart = sample;
+                    segmentBeat = 0.0;
+                    switched = true;
                 }
-            peak = std::max (peak, b.audio.getMagnitude (0, 512));
-            ppq += 512 * 2.0 / 48000.0;
+                if (scenario.bpm2 != scenario.bpm1 && ppq >= 4.0 && ! switched)
+                {
+                    for (const auto& e : expectedOns (pattern, segmentBeat, ppq, swing, tempo, 48000.0))
+                        want.insert ({ segmentStart + e.first, e.second });
+                    tempo = scenario.bpm2;
+                    segmentStart = sample;
+                    segmentBeat = ppq;
+                    switched = true;
+                }
+                head.info.setBpm (tempo);
+                head.info.setPpqPosition (ppq);
+                run (p, b);
+                for (const auto meta : b.midi)
+                    if (meta.getMessage().isNoteOn())
+                        got.insert ({ sample + meta.samplePosition, padForNote (NoteMap::gm, meta.getMessage().getNoteNumber()) });
+                sample += 512;
+                ppq += 512 * tempo / 60.0 / 48000.0;
+            }
+            for (const auto& e : expectedOns (pattern, segmentBeat, ppq, swing, tempo, 48000.0))
+                want.insert ({ segmentStart + e.first, e.second });
+            check (got == want && ! got.empty(), juce::String (scenario.what) + ": every note on its sample (" + juce::String ((int) got.size()) + " of "
+                                                    + juce::String ((int) want.size()) + ")");
         }
-        check (notesOut == 15 + 3, "a bar and the next downbeat of the test pattern go to MIDI out (" + juce::String (notesOut) + " notes)");
-        check (firstNote == 36, "starting with the kick on 36");
-        check (peak > 0.5f, "and the pads sound");
+
+        // The pads sound; MIDI out stops cleanly when the transport does.
+        float peak = 0.0f;
+        head.info.setPpqPosition (0.0);
+        for (int i = 0; i < 20; ++i)
+        {
+            run (p, b);
+            peak = std::max (peak, b.audio.getMagnitude (0, 512));
+        }
+        head.info.setIsPlaying (false);
+        run (p, b);
+        bool offs = true;
+        for (const auto meta : b.midi)
+            offs = offs && meta.getMessage().isNoteOff();
+        check (peak > 0.5f && offs, "the pads sound, and stopping sends only note-offs");
         p.setPlayHead (nullptr);
+
+        // Settings remake the pattern with the same seed; Generate makes a new one.
+        setParam (p, "density", 1.0f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        const auto denser = p.currentPattern();
+        bool superset = true;
+        for (int pad = 0; pad < numPads; ++pad)
+            for (int s = 0; s < pattern.steps(); ++s)
+                superset = superset && (pattern.lanes[(size_t) pad][(size_t) s].velocity == 0 || denser.lanes[(size_t) pad][(size_t) s].velocity > 0);
+        int before = 0, after = 0;
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            before += pattern.hits (pad);
+            after += denser.hits (pad);
+        }
+        check (superset && after > before, "more Density remakes the pattern with more hits (" + juce::String (before) + " → " + juce::String (after) + ")");
+
+        p.setLaneLocked (1, true);
+        const auto beforeGenerate = p.currentPattern();
+        p.newPattern();
+        const auto generated = p.currentPattern();
+        check (! (generated == beforeGenerate) && generated.lanes[1] == beforeGenerate.lanes[1], "Generate: a new pattern, the locked lane kept");
+        const auto kickBefore = generated.lanes[0][3].velocity;
+        p.toggleStep (0, 3);
+        check ((p.currentPattern().lanes[0][3].velocity > 0) != (kickBefore > 0), "a step toggles by hand");
+
+        juce::String error;
+        const auto file = p.writePatternMidi (error);
+        MidiSong song;
+        std::string readError;
+        juce::MemoryBlock data;
+        file.loadFileAsData (data);
+        const bool read = readMidiFile ((const uint8_t*) data.getData(), data.getSize(), song, readError);
+        int hits = 0;
+        const auto now = p.currentPattern();
+        for (int pad = 0; pad < numPads; ++pad)
+            for (int s = 0; s < now.steps(); ++s)
+                hits += now.lanes[(size_t) pad][(size_t) s].velocity > 0 ? now.lanes[(size_t) pad][(size_t) s].repeats : 0;
+        check (read && (int) song.notes.size() == hits && file.getFileName().startsWith ("DrumChimp House 4 bars"),
+               "the drag-out is the pattern: " + file.getFileName() + ", " + juce::String ((int) song.notes.size()) + " notes");
+
+        // The pattern (with the hand edit) and lane locks go with the set, as they are.
+        juce::MemoryBlock saved;
+        p.getStateInformation (saved);
+        DrumChimpProcessor q;
+        q.setStateInformation (saved.getData(), (int) saved.getSize());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        check (q.currentPattern() == now && q.isLaneLocked (1) && ! q.isLaneLocked (0), "pattern, hand edits and lane locks restored");
+        check (std::abs (q.state.getRawParameterValue ("swing")->load() - (float) swing) < 0.001f, "and restoring doesn't reset the swing");
     }
 
     void testState (const Files& f)
@@ -405,6 +520,18 @@ namespace
             changed += second[(size_t) pad] != first[(size_t) pad] ? 1 : 0;
         check (changed == numPads, "Randomise changes all eight pads (" + juce::String (changed) + ")");
         check (kitMatchesRoles (p, *index), "each with a sample of its role (family: " + p.lastFamily() + ")");
+        bool allLoad = true;
+        for (int round = 0; round < 10 && allLoad; ++round)
+        {
+            if (round > 0)
+                p.randomiseKit();
+            waitFor ([&] { return allSettled (p); });
+            for (int pad = 0; pad < numPads; ++pad)
+                allLoad = allLoad && p.padSource (pad).status == Status::loaded;
+        }
+        check (allLoad, "and every sample Randomise picks loads (10 kits): none from protected Packs");
+        for (int round = 1; round < 10; ++round)
+            p.undoKit();                       // back to the first Randomise's kit
         check (p.canUndo(), "and can be undone");
         p.undoKit();
         check (p.kitPaths() == first && p.canRedo(), "Undo brings back the kit before");

@@ -1,6 +1,10 @@
 // Reads an audio file's format and length from its header, without decoding any audio (PLAN.md
 // §3.2 step 4: the classifier skips long files). WAV, AIFF/AIFC and FLAC. Plain C++, no JUCE.
 // File I/O: message or background thread only.
+//
+// `protectedFile`: an AIFC with an `able` chunk. Every sample in Ableton's installed Packs is one
+// (found in Phase 4): its header reads, but its audio is protected, and only Live can play it
+// (macOS's own afinfo can't open it either). The Core Library's samples aren't protected.
 #pragma once
 
 #include <cmath>
@@ -18,6 +22,7 @@ namespace drumchimp
         int channels = 0;
         int bitsPerSample = 0;
         uint64_t frames = 0;
+        bool protectedFile = false;
 
         double seconds() const noexcept { return sampleRate > 0.0 ? (double) frames / sampleRate : 0.0; }
     };
@@ -89,6 +94,8 @@ namespace drumchimp
             {
                 const uint32_t size = be32 (chunk + 4);
                 const auto next = (std::streamoff) in.tellg() + (std::streamoff) size + (size & 1);
+                if (std::memcmp (chunk, "able", 4) == 0)
+                    h.protectedFile = true;       // Ableton's protected pack audio (it comes before COMM)
                 if (std::memcmp (chunk, "COMM", 4) == 0 && size >= 18)
                 {
                     unsigned char c[18];

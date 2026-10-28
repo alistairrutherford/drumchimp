@@ -1,7 +1,7 @@
-// Phase 0 core tests: the test pattern, its MIDI file, the audio header reader and Library.cfg
-// parsing. No JUCE.
+// Core tests: the note maps, the audio header reader and Library.cfg parsing. No JUCE. (The
+// Phase 0 test pattern's tests went with it in Phase 4; test_pattern.cpp covers playback.)
 #include "TestUtil.h"
-#include "core/engine/TestPattern.h"
+#include "core/engine/NoteMap.h"
 #include "core/library/AudioHeader.h"
 #include "core/library/LibraryRoots.h"
 #include <cstdio>
@@ -13,88 +13,11 @@ using testutil::check;
 
 namespace
 {
-    struct Event { double beat; int pad; bool on; };
-
-    std::vector<Event> collect (double from, double to)
+    void testNoteMap()
     {
-        std::vector<Event> out;
-        testpattern::forEachEvent (from, to, [&] (double beat, int pad, uint8_t, bool on) { out.push_back ({ beat, pad, on }); });
-        std::sort (out.begin(), out.end(), [] (const Event& a, const Event& b)
-        {
-            return a.beat != b.beat ? a.beat < b.beat : (a.pad != b.pad ? a.pad < b.pad : a.on < b.on);
-        });
-        return out;
-    }
-
-    void testPattern()
-    {
-        std::cout << "Test pattern\n";
-        const auto bar = collect (0.0, 4.0);
-        check (std::count_if (bar.begin(), bar.end(), [] (const Event& e) { return e.on; }) == (long) testpattern::hits.size(),
-               "one bar has every hit once");
-        check (std::count_if (bar.begin(), bar.end(), [] (const Event& e) { return ! e.on; }) == (long) testpattern::hits.size(),
-               "and every note-off (the last ends before the bar line)");
-
-        // The same events whatever the block size, including blocks that straddle bar lines.
-        for (const double block : { 0.0123, 0.25, 1.0 / 3.0, 3.7 })
-        {
-            std::vector<Event> pieces;
-            for (double from = 0.0; from < 8.0; from += block)
-            {
-                const auto part = collect (from, std::min (from + block, 8.0));
-                pieces.insert (pieces.end(), part.begin(), part.end());
-            }
-            std::sort (pieces.begin(), pieces.end(), [] (const Event& a, const Event& b)
-            {
-                return a.beat != b.beat ? a.beat < b.beat : (a.pad != b.pad ? a.pad < b.pad : a.on < b.on);
-            });
-            const auto whole = collect (0.0, 8.0);
-            bool same = pieces.size() == whole.size();
-            for (size_t i = 0; same && i < whole.size(); ++i)
-                same = std::abs (pieces[i].beat - whole[i].beat) < 1.0e-9 && pieces[i].pad == whole[i].pad && pieces[i].on == whole[i].on;
-            check (same, "block size " + std::to_string (block) + " gives the same events as one block");
-        }
-
-        // Blocks: 120 BPM at 44.1 kHz puts every other sixteenth between two samples (5512.5
-        // samples apart). Each note-on must land on the first sample at or after its beat, once.
-        for (const int blockSize : { 1, 64, 441, 512, 4096 })
-        {
-            const double bps = 120.0 / 60.0 / 44100.0;
-            std::vector<std::pair<int64_t, int>> ons;                // (global sample, pad)
-            const int64_t total = 2 * 4 * 22050;                    // two bars
-            for (int64_t start = 0; start < total; start += blockSize)
-                testpattern::forEachEventInBlock ((double) start * bps, bps, blockSize, [&] (int sample, int pad, uint8_t, bool on)
-                {
-                    if (on && start + sample < total)               // the last block may run into bar 3
-                        ons.push_back ({ start + sample, pad });
-                });
-            bool exact = ons.size() == 2 * testpattern::hits.size();
-            for (const auto& [sample, pad] : ons)
-            {
-                const auto it = std::find_if (testpattern::hits.begin(), testpattern::hits.end(), [&, s = sample, p = pad] (const auto& h)
-                {
-                    const double beat = std::fmod ((double) s * bps, 4.0);
-                    const double hitBeat = h.step * testpattern::stepBeats;
-                    return h.pad == p && beat >= hitBeat - 1.0e-9 && beat < hitBeat + bps;   // at or within one sample after
-                });
-                exact = exact && it != testpattern::hits.end();
-            }
-            check (exact, "block size " + std::to_string (blockSize) + ": every note-on once, on the first sample at or after its beat");
-        }
-
-        check (collect (-4.0, 0.0).size() == 2 * testpattern::hits.size(), "negative positions (pre-roll) loop too");
-        check (collect (2.0, 2.0).empty(), "an empty window has no events");
+        std::cout << "Note map\n";
         check (padForNote (NoteMap::gm, 36) == 0 && padForNote (NoteMap::gm, 49) == 7 && padForNote (NoteMap::gm, 60) == -1, "GM: note → pad");
         check (padForNote (NoteMap::chromatic, 43) == 7 && noteForPad (NoteMap::chromatic, 2) == 38 && padForNote (NoteMap::chromatic, 49) == -1, "Chromatic: note ↔ pad");
-
-        const auto song = testpattern::testPatternSong (4, 97.0);
-        const auto bytes = writeMidiFile (song);
-        MidiSong back;
-        std::string error;
-        check (readMidiFile (bytes.data(), bytes.size(), back, error), "the 4-bar MIDI file reads back");
-        check (back.notes.size() == 4 * testpattern::hits.size(), "with every note");
-        check (std::abs (back.bpm - 97.0) < 0.01, "and its tempo");
-        check (back.notes.back().start == (int64_t) ((3 * 4.0 + 15 * 0.25) * 960), "the last note is bar 4's sixteenth 16");
     }
 
     void put (std::ofstream& out, std::initializer_list<int> bytes)
@@ -159,7 +82,29 @@ namespace
             put (out, { 0x40, 0x0e, 0xac, 0x44, 0, 0, 0, 0, 0, 0 });   // 44100 as 80-bit extended
         }
         const auto a = readAudioHeader (aif);
-        check (a.ok && a.sampleRate == 44100.0 && a.channels == 1 && a.frames == 88200, "AIFF header");
+        check (a.ok && a.sampleRate == 44100.0 && a.channels == 1 && a.frames == 88200 && ! a.protectedFile, "AIFF header");
+
+        // An Ableton Pack sample: AIFC, FVER, then an `able` chunk before COMM.
+        const auto pack = (dir / "pack.aif").string();
+        {
+            std::ofstream out (pack, std::ios::binary);
+            out << "FORM";
+            putBE (out, 0, 4);
+            out << "AIFC" << "FVER";
+            putBE (out, 4, 4);
+            putBE (out, 0xa2805140, 4);
+            out << "able";
+            putBE (out, 6, 4);
+            put (out, { 1, 2, 3, 4, 5, 6 });
+            out << "COMM";
+            putBE (out, 18, 4);
+            putBE (out, 1, 2);
+            putBE (out, 44100, 4);
+            putBE (out, 16, 2);
+            put (out, { 0x40, 0x0e, 0xac, 0x44, 0, 0, 0, 0, 0, 0 });
+        }
+        const auto protectedHeader = readAudioHeader (pack);
+        check (protectedHeader.ok && protectedHeader.protectedFile && protectedHeader.frames == 44100, "an Ableton Pack sample reads, and is marked protected");
         check (std::abs (a.seconds() - 2.0) < 1.0e-9, "AIFF length 2 s");
 
         // FLAC: STREAMINFO for 96 kHz, 2 channels, 24-bit, 48,000 samples.
@@ -228,7 +173,7 @@ namespace
 
 int main()
 {
-    testPattern();
+    testNoteMap();
     testAudioHeader();
     testLibraryCfg();
     return testutil::finish ("test_core");

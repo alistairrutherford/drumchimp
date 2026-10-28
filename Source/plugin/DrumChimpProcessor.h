@@ -2,9 +2,12 @@
 //
 //   Pads       notes on the pad notes (Note map: GM or Chromatic) play the pads, in both Source
 //              modes; they are not passed to the MIDI output
-//   Generator  Source = Generator plays the test pattern (core/engine/TestPattern.h) in time with
-//              the host and sends it to the MIDI output, for another track's *MIDI From* (until
-//              the pattern generator, Phase 4)
+//   Generator  Source = Generator plays the pattern in time with the host and sends it to the
+//              MIDI output, for another track's *MIDI From*. The pattern comes from the generator
+//              (core/pattern): a new one with the same seed whenever Style, Bars, Density,
+//              Complexity, Humanise, Ghost notes, Fill or a pad's role changes, and with a new seed
+//              on Generate. Steps can be toggled by hand, and a pad's lane locked. It reaches the
+//              audio thread through a Handoff, and is saved with the set.
 //   Samples    loadSample() decodes on a background thread (SampleLoader); the finished kit goes
 //              to the audio thread as a whole bank (DrumEngine::publish). A new instance loads the
 //              Core Library 909 kit (DefaultKit.h) unless the host restores a state first.
@@ -20,8 +23,9 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
-#include "../core/engine/TestPattern.h"
 #include "../core/kit/KitBuilder.h"
+#include "../core/pattern/PatternGenerator.h"
+#include "../core/util/Handoff.h"
 #include "../core/sampler/DrumEngine.h"
 #include "Library.h"
 #include "Parameters.h"
@@ -104,7 +108,18 @@ namespace drumchimp
 
         void audition (int pad) noexcept { pendingAuditions.fetch_or (1u << pad); }
         juce::uint32 takeHits() noexcept { return hits.exchange (0); }   // pads played since the last call
-        juce::File writeTestPattern (int bars, juce::String& error) const;
+        juce::File writePatternMidi (juce::String& error) const;   // the drag-out
+
+        // The pattern (message thread).
+        static const std::vector<Style>& styles();
+        const Style& currentStyle() const;
+        Pattern currentPattern() const { return pattern; }
+        void newPattern();                // Generate: a new seed
+        void toggleStep (int pad, int step);
+        bool isLaneLocked (int pad) const { return laneLocks[(size_t) juce::jlimit (0, numPads - 1, pad)]; }
+        void setLaneLocked (int pad, bool shouldLock);
+        int playingStep() const noexcept { return playStep.load(); }   // −1 when the generator isn't playing
+        juce::uint32 patternVersion() const noexcept { return patternChanges.load(); }
 
         struct Status
         {
@@ -122,6 +137,10 @@ namespace drumchimp
         void timerCallback() override;
         void takeLoadedSamples();
         void relocateMissing();
+        GeneratorSettings generatorSettings() const;
+        void regenerate();
+        void regenerateIfChanged();
+        void publishPattern();
         void publishKit();
         KitRequest kitRequest() const;
         void flushNoteOffs (juce::MidiBuffer& midi, int sample, NoteMap map) noexcept;
@@ -141,6 +160,16 @@ namespace drumchimp
         juce::String family;
         bool stateRestored = false, defaultKitTried = false, lookForMissing = false;
         juce::uint32 libraryVersionSeen = 0;
+
+        // The pattern (message thread).
+        Pattern pattern;
+        uint64_t patternSeed = 1;
+        std::array<bool, numPads> laneLocks {};
+        struct Made { int style = -1; GeneratorSettings settings; std::array<PadRole, numPads> roles {}; };
+        Made made;                        // what the current pattern was generated from
+        int lastStyle = -1;
+        Handoff<Pattern> patternHandoff;
+        std::atomic<juce::uint32> patternChanges { 0 };
         std::atomic<juce::uint32> kitChanges { 0 };
 
         // Audio thread.
@@ -151,6 +180,8 @@ namespace drumchimp
         NoteMap openMap = NoteMap::gm;
         bool wasGenerating = false;
         double expectedPpq = 0.0;
+        const Pattern* lastPattern = nullptr;
+        std::atomic<int> playStep { -1 };
 
         std::atomic<juce::uint32> pendingAuditions { 0 }, hits { 0 };
         std::atomic<bool> playing { false };

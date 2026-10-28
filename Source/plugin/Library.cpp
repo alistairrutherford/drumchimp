@@ -62,7 +62,7 @@ namespace drumchimp
             auto index = std::make_shared<const LibraryIndex> (std::move (samples), roots);
             {
                 const juce::ScopedLock sl (lock);
-                lastStatus = { false, index->size(), index->drums(), roots.size(), stats.milliseconds };
+                lastStatus = { false, index->size(), index->drums(), roots.size(), stats.protectedFiles, stats.milliseconds };
                 current = std::move (index);
             }
             ++versions;

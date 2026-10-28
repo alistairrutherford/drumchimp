@@ -8,7 +8,9 @@
 //                 path, size, mtime, seconds, tab-separated). Classifications aren't cached: they
 //                 take microseconds, so a classifier change needs no rescan.
 //   scanLibrary   walks the roots: skips .asd files, other extensions and loops, reuses the cache
-//                 for unchanged files, reads the header of the rest (AudioHeader.h), classifies
+//                 for unchanged files, reads the header of the rest (AudioHeader.h), classifies.
+//                 Ableton's protected pack samples are left out (only Live can play them), and
+//                 counted; the cache remembers them as protected (a length of −1).
 //   LibraryIndex  the result, with the samples of each role
 #pragma once
 
@@ -38,7 +40,7 @@ namespace drumchimp
         struct Entry { int64_t size = 0, modified = 0; double seconds = 0.0; };
         std::unordered_map<std::string, Entry> entries;
 
-        static constexpr const char* header = "DrumChimp library cache 1";
+        static constexpr const char* header = "DrumChimp library cache 2";   // 2: protected files (Phase 4)
 
         bool read (const std::string& file)
         {
@@ -85,7 +87,7 @@ namespace drumchimp
 
     struct ScanStats
     {
-        size_t files = 0, headersRead = 0, fromCache = 0, skippedLoops = 0, unreadable = 0;
+        size_t files = 0, headersRead = 0, fromCache = 0, skippedLoops = 0, unreadable = 0, protectedFiles = 0;
         double milliseconds = 0.0;
         bool cancelled = false;
     };
@@ -151,9 +153,14 @@ namespace drumchimp
                         ++stats.unreadable;
                         continue;
                     }
-                    s.seconds = h.seconds();
+                    s.seconds = h.protectedFile ? -1.0 : h.seconds();
                 }
                 seen[s.path] = { s.size, modified, s.seconds };
+                if (s.seconds < 0.0)
+                {
+                    ++stats.protectedFiles;
+                    continue;
+                }
                 if (s.seconds > maxIndexedSeconds)
                     continue;
                 s.classification = classify (s.relative, s.seconds);

@@ -1,4 +1,6 @@
 #include "Parameters.h"
+#include "../core/pattern/FactoryStyles.h"
+#include "../core/pattern/Style.h"
 
 namespace drumchimp::params
 {
@@ -62,6 +64,25 @@ namespace drumchimp::params
             {
                 return v < 0.005f ? String ("Matched") : v > 0.995f ? String ("Wild") : String (roundToInt (v * 100.0f)) + "% wild";
             })));
+        // The pattern generator (PLAN.md §3.4). Changing any of these makes a new pattern with the
+        // same seed; Swing applies as it plays.
+        StringArray styleNames;
+        for (const char* text : factoryStyles)
+        {
+            Style s;
+            std::string error;
+            styleNames.add (parseStyle (text, s, error) ? String (s.name) : String ("?"));
+        }
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "style", 1 }, "Style", styleNames, 0));
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "bars", 1 }, "Bars", StringArray { "1", "2", "4", "8" }, 2));
+        const auto percent = AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 100.0f)) + "%"; });
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "density", 1 }, "Density", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.5f, percent));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "complexity", 1 }, "Complexity", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.4f, percent));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "swing", 1 }, "Swing", NormalisableRange<float> (0.5f, 0.75f, 0.01f), 0.5f, percent));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "humanise", 1 }, "Humanise", NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.25f, percent));
+        layout.add (std::make_unique<AudioParameterBool> (ParameterID { "ghosts", 1 }, "Ghost notes", true));
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "fill", 1 }, "Fill", StringArray { "Off", "Every 2 bars", "Every 4 bars", "Every 8 bars" }, 2));
+
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "source", 1 }, "Source", StringArray { "Generator", "MIDI In" }, 0));
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "notemap", 1 }, "Note map", StringArray { "GM", "Chromatic" }, 0));
         // Automatable only because Live leaves non-automatable VST3 parameters out of the LOM
@@ -78,6 +99,7 @@ namespace drumchimp::params
             pads[(size_t) pad] = { get ("level"), get ("pan"), get ("tune"), get ("decay"), get ("vel"), get ("choke"), get ("mute"), get ("solo") };
         }
         source = state.getRawParameterValue ("source");
+        swing = state.getRawParameterValue ("swing");
         noteMapParam = state.getRawParameterValue ("notemap");
     }
 
@@ -107,6 +129,11 @@ namespace drumchimp::params
     NoteMap Reader::noteMap() const noexcept
     {
         return juce::roundToInt (noteMapParam->load (std::memory_order_relaxed)) == 1 ? NoteMap::chromatic : NoteMap::gm;
+    }
+
+    double Reader::swingAmount() const noexcept
+    {
+        return (double) swing->load (std::memory_order_relaxed);
     }
 
     bool Reader::generatorOn() const noexcept

@@ -44,7 +44,7 @@ namespace drumchimp
     DragHandle::DragHandle (DrumChimpProcessor& p) : processor (p)
     {
         setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-        setTooltip ("Drag onto a clip slot or the Arrangement: 4 bars of the test pattern as a MIDI clip");
+        setTooltip ("Drag onto a clip slot or the Arrangement: the pattern as a MIDI clip");
     }
 
     void DragHandle::paint (juce::Graphics& g)
@@ -56,7 +56,7 @@ namespace drumchimp
         g.drawRoundedRectangle (r, 4.0f, dragging ? 2.0f : 1.0f);
         g.setColour (text);
         g.setFont (font (12.5f, true));
-        g.drawText ("Drag 4-bar MIDI", getLocalBounds(), juce::Justification::centred);
+        g.drawText ("Drag MIDI", getLocalBounds(), juce::Justification::centred);
     }
 
     void DragHandle::mouseDrag (const juce::MouseEvent& e)
@@ -64,7 +64,7 @@ namespace drumchimp
         if (dragging || e.getDistanceFromDragStart() < 4)
             return;
         juce::String error;
-        const auto file = processor.writeTestPattern (4, error);
+        const auto file = processor.writePatternMidi (error);
         if (! file.existsAsFile())
         {
             setTooltip (error);
@@ -211,6 +211,119 @@ namespace drumchimp
     }
 
     //==========================================================================
+    StepGrid::StepGrid (DrumChimpProcessor& p) : processor (p)
+    {
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            locks.push_back (std::make_unique<IconButton> (IconButton::Icon::lock, "Lock this lane: Generate and setting changes keep it"));
+            locks.back()->onClick = [this, pad] { processor.setLaneLocked (pad, locks[(size_t) pad]->getToggleState()); };
+            addAndMakeVisible (*locks.back());
+        }
+        refresh();
+    }
+
+    juce::Rectangle<int> StepGrid::cellArea() const
+    {
+        return getLocalBounds().withTrimmedLeft (labelWidth).withTrimmedTop (16);
+    }
+
+    void StepGrid::resized()
+    {
+        const auto cells = cellArea();
+        const int rowHeight = cells.getHeight() / numPads;
+        for (int pad = 0; pad < numPads; ++pad)
+            locks[(size_t) pad]->setBounds (labelWidth - 22, cells.getY() + pad * rowHeight + (rowHeight - 16) / 2, 16, 16);
+    }
+
+    void StepGrid::refresh()
+    {
+        pattern = processor.currentPattern();
+        for (int pad = 0; pad < numPads; ++pad)
+            locks[(size_t) pad]->setToggleState (processor.isLaneLocked (pad), juce::dontSendNotification);
+        repaint();
+    }
+
+    void StepGrid::setPlayhead (int step)
+    {
+        if (step != playhead)
+        {
+            playhead = step;
+            repaint();
+        }
+    }
+
+    void StepGrid::paint (juce::Graphics& g)
+    {
+        const auto cells = cellArea();
+        const int steps = pattern.steps();
+        if (steps <= 0)
+            return;
+        const float w = (float) cells.getWidth() / (float) steps;
+        const int rowHeight = cells.getHeight() / numPads;
+        const int beat = pattern.stepsPerBar / 4;
+
+        // Bar numbers along the top; beats and bars as lines.
+        g.setFont (font (11.0f));
+        for (int bar = 0; bar < pattern.bars; ++bar)
+        {
+            g.setColour (faint);
+            g.drawText (juce::String (bar + 1), (int) (cells.getX() + bar * pattern.stepsPerBar * w) + 2, 0, 40, 14, juce::Justification::centredLeft);
+        }
+        for (int s = 0; s < steps; ++s)
+        {
+            const float x = cells.getX() + s * w;
+            if (s == playhead)
+            {
+                g.setColour (raised.brighter (0.15f));
+                g.fillRect (x, (float) cells.getY(), w, (float) (rowHeight * numPads));
+            }
+            if (s % beat == 0)
+            {
+                g.setColour (s % pattern.stepsPerBar == 0 ? dim.withAlpha (0.5f) : outline);
+                g.drawVerticalLine ((int) x, (float) cells.getY(), (float) (cells.getY() + rowHeight * numPads));
+            }
+        }
+
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            const int y = cells.getY() + pad * rowHeight;
+            g.setColour (dim);
+            g.setFont (font (11.5f));
+            g.drawText (padRoleName (processor.padRole (pad)), 0, y, labelWidth - 26, rowHeight, juce::Justification::centredLeft);
+            for (int s = 0; s < steps; ++s)
+            {
+                const auto r = juce::Rectangle<float> (cells.getX() + s * w, (float) y, w, (float) rowHeight).reduced (w > 8.0f ? 1.5f : 0.5f, 2.0f);
+                const auto& c = pattern.lanes[(size_t) pad][(size_t) s];
+                if (c.velocity == 0)
+                {
+                    g.setColour (panel.brighter (0.05f));
+                    g.fillRoundedRectangle (r, 2.0f);
+                    continue;
+                }
+                g.setColour (accent.withAlpha (0.3f + 0.7f * (float) c.velocity / 127.0f));
+                g.fillRoundedRectangle (r, 2.0f);
+                if (c.repeats > 1 && r.getWidth() > 6.0f)
+                {
+                    g.setColour (background);
+                    for (int k = 0; k < c.repeats; ++k)
+                        g.fillEllipse (r.getX() + r.getWidth() * (float) (k + 1) / (float) (c.repeats + 1) - 1.2f, r.getCentreY() - 1.2f, 2.4f, 2.4f);
+                }
+            }
+        }
+    }
+
+    void StepGrid::mouseDown (const juce::MouseEvent& e)
+    {
+        const auto cells = cellArea();
+        if (! cells.contains (e.getPosition()) || pattern.steps() <= 0)
+            return;
+        const int step = (int) ((float) (e.x - cells.getX()) * (float) pattern.steps() / (float) cells.getWidth());
+        const int pad = (e.y - cells.getY()) / (cells.getHeight() / numPads);
+        processor.toggleStep (pad, step);
+        refresh();
+    }
+
+    //==========================================================================
     Browser::Browser (DrumChimpProcessor& p, std::function<int()> selectedPadFn)
         : processor (p), selectedPad (std::move (selectedPadFn))
     {
@@ -329,7 +442,7 @@ namespace drumchimp
 
     //==========================================================================
     DrumChimpEditor::DrumChimpEditor (DrumChimpProcessor& p)
-        : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; })
+        : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; }), grid (p)
     {
         lookAndFeel.setColourScheme ({ background, panel, raised, outline, text, accent, text, raised, text });
         lookAndFeel.setColour (juce::Slider::rotarySliderFillColourId, accent);
@@ -407,17 +520,32 @@ namespace drumchimp
 
         const std::array<const char*, 5> names { "Level", "Pan", "Tune", "Decay", "Velocity" };
         for (size_t i = 0; i < knobs.size(); ++i)
+            setUpKnob (knobs[i], names[i]);
+
+        // The pattern.
+        const auto& styleList = DrumChimpProcessor::styles();
+        for (size_t i = 0; i < styleList.size(); ++i)
+            style.addItem (styleList[i].name, (int) i + 1);
+        style.setTooltip ("The style the pattern is made from. A new style brings its own swing");
+        styleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "style", style);
+        bars.addItemList ({ "1 bar", "2 bars", "4 bars", "8 bars" }, 1);
+        barsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "bars", bars);
+        fill.addItemList ({ "No fills", "Fill every 2", "Fill every 4", "Fill every 8" }, 1);
+        fill.setTooltip ("A fill in the last beat (or two) of every 2, 4 or 8 bars, then a crash");
+        fillAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "fill", fill);
+        ghostsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.state, "ghosts", ghosts);
+        generate.setTooltip ("A new pattern in this style (a new seed). Changing a setting remakes this one");
+        generate.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
+        generate.onClick = [this] { processor.newPattern(); };
+        for (auto* c : std::initializer_list<juce::Component*> { &style, &bars, &fill, &ghosts, &generate })
+            addAndMakeVisible (*c);
+        const std::array<const char*, 4> patternNames { "Density", "Complexity", "Swing", "Humanise" };
+        for (size_t i = 0; i < patternKnobs.size(); ++i)
         {
-            knobs[i].slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-            knobs[i].slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
-            knobs[i].slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-            knobs[i].label.setText (names[i], juce::dontSendNotification);
-            knobs[i].label.setJustificationType (juce::Justification::centred);
-            knobs[i].label.setFont (font (12.0f));
-            knobs[i].label.setColour (juce::Label::textColourId, dim);
-            addAndMakeVisible (knobs[i].slider);
-            addAndMakeVisible (knobs[i].label);
+            setUpKnob (patternKnobs[i], patternNames[i]);
+            patternKnobAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, patternKnobs[i].id, patternKnobs[i].slider);
         }
+        addAndMakeVisible (grid);
         choke.addItemList (params::chokeGroups, 1);
         choke.setTooltip ("Choke group: a pad cuts off the other pads in its group (the hats share A)");
         addAndMakeVisible (choke);
@@ -432,7 +560,7 @@ namespace drumchimp
         libraryStatus.setJustificationType (juce::Justification::centredRight);
         addAndMakeVisible (libraryStatus);
 
-        setSize (960, 640);
+        setSize (960, 760);
         select (0);
         startTimerHz (30);
     }
@@ -441,6 +569,19 @@ namespace drumchimp
     {
         stopTimer();
         setLookAndFeel (nullptr);
+    }
+
+    void DrumChimpEditor::setUpKnob (Knob& k, const char* name)
+    {
+        k.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+        k.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 70, 18);
+        k.slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        k.label.setText (name, juce::dontSendNotification);
+        k.label.setJustificationType (juce::Justification::centred);
+        k.label.setFont (font (12.0f));
+        k.label.setColour (juce::Label::textColourId, dim);
+        addAndMakeVisible (k.slider);
+        addAndMakeVisible (k.label);
     }
 
     void DrumChimpEditor::select (int pad)
@@ -561,6 +702,13 @@ namespace drumchimp
             browser.refresh();
         }
 
+        if (processor.patternVersion() != seenPattern || processor.kitVersion() != seenKit)
+        {
+            seenPattern = processor.patternVersion();
+            grid.refresh();
+        }
+        grid.setPlayhead (processor.playingStep());
+
         const auto played = processor.takeHits();
         for (int i = 0; i < numPads; ++i)
         {
@@ -582,6 +730,9 @@ namespace drumchimp
                                    : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "
                                          + juce::String ((int) lib.roots) + " places" + (lib.scanning ? juce::String (" (scanning again)") : juce::String()),
                                juce::dontSendNotification);
+        libraryStatus.setTooltip (lib.protectedFiles > 0 ? juce::String ((int) lib.protectedFiles) + " samples in your Ableton Packs are protected: only Live can play them, "
+                                                                "so DrumChimp leaves them out. It uses the Core Library, your User Library and your own folders"
+                                                         : juce::String());
         randomise.setEnabled (processor.library->index() != nullptr);
     }
 
@@ -595,13 +746,15 @@ namespace drumchimp
         g.setColour (panel);
         g.fillRoundedRectangle (browserArea.toFloat(), 6.0f);
         g.fillRoundedRectangle (padPanelArea.toFloat(), 6.0f);
+        g.fillRoundedRectangle (patternArea.toFloat(), 6.0f);
+        g.fillRoundedRectangle (grid.getBounds().toFloat().expanded (10.0f, 8.0f), 6.0f);
     }
 
     void DrumChimpEditor::resized()
     {
         auto r = getLocalBounds().reduced (16);
         auto top = r.removeFromTop (28);
-        dragHandle.setBounds (top.removeFromRight (140));
+        dragHandle.setBounds (top.removeFromRight (120));
         top.removeFromRight (10);
         noteMap.setBounds (top.removeFromRight (110));
         top.removeFromRight (8);
@@ -620,44 +773,68 @@ namespace drumchimp
         kitBar.removeFromLeft (12);
         kits.setBounds (kitBar.removeFromRight (80));
         familyLabel.setBounds (kitBar);
-        r.removeFromTop (14);
+        r.removeFromTop (12);
 
         auto statusRow = r.removeFromBottom (20);
         libraryStatus.setBounds (statusRow.removeFromRight (380));
         status.setBounds (statusRow);
-        r.removeFromBottom (8);
+        r.removeFromBottom (14);
+        grid.setBounds (r.removeFromBottom (168).reduced (10, 8));
+        r.removeFromBottom (12);
 
-        auto padArea = r.removeFromLeft (440);
-        const int w = padArea.getWidth() / 4, h = padArea.getHeight() / 2;
+        // Left: the pads, and the pattern's settings under them.
+        auto left = r.removeFromLeft (440);
+        patternArea = left.removeFromBottom (150);
+        left.removeFromBottom (10);
+        const int w = left.getWidth() / 4, h = left.getHeight() / 2;
         for (int i = 0; i < numPads; ++i)
-            pads[(size_t) i]->setBounds (padArea.getX() + (i % 4) * w, padArea.getY() + (i / 4) * h, w, h);
+            pads[(size_t) i]->setBounds (left.getX() + (i % 4) * w, left.getY() + (i / 4) * h, w, h);
+
+        auto pattern = patternArea.reduced (12, 10);
+        auto controls = pattern.removeFromTop (26);
+        style.setBounds (controls.removeFromLeft (120));
+        controls.removeFromLeft (6);
+        bars.setBounds (controls.removeFromLeft (80));
+        controls.removeFromLeft (6);
+        fill.setBounds (controls.removeFromLeft (110));
+        generate.setBounds (controls.removeFromRight (90));
+        pattern.removeFromTop (6);
+        ghosts.setBounds (pattern.removeFromRight (100).withSizeKeepingCentre (100, 24));
+        const int pw = pattern.getWidth() / (int) patternKnobs.size();
+        for (auto& k : patternKnobs)
+        {
+            auto cell = pattern.removeFromLeft (pw);
+            k.label.setBounds (cell.removeFromTop (14));
+            k.slider.setBounds (cell);
+        }
         r.removeFromLeft (16);
 
-        browserArea = r.removeFromTop (r.getHeight() - 270);
+        // Right: the browser, and the selected pad under it.
+        padPanelArea = r.removeFromBottom (250);
+        r.removeFromBottom (10);
+        browserArea = r;
         browser.setBounds (browserArea.reduced (12, 10));
-        r.removeFromTop (10);
-        padPanelArea = r;
 
-        auto panelArea = padPanelArea.reduced (14, 12);
+        auto panelArea = padPanelArea.reduced (14, 10);
         auto titleRow = panelArea.removeFromTop (26);
         clearButton.setBounds (titleRow.removeFromRight (60));
         titleRow.removeFromRight (6);
         loadButton.setBounds (titleRow.removeFromRight (70));
         padTitle.setBounds (titleRow.removeFromLeft (60));
         padRole.setBounds (titleRow.removeFromLeft (130));
-        panelArea.removeFromTop (4);
-        padSample.setBounds (panelArea.removeFromTop (52));
-        panelArea.removeFromTop (4);
+        panelArea.removeFromTop (2);
+        padSample.setBounds (panelArea.removeFromTop (46));
+        panelArea.removeFromTop (2);
 
-        auto knobRow = panelArea.removeFromTop (110);
+        auto knobRow = panelArea.removeFromTop (104);
         const int kw = knobRow.getWidth() / (int) knobs.size();
         for (auto& k : knobs)
         {
             auto cell = knobRow.removeFromLeft (kw);
-            k.label.setBounds (cell.removeFromTop (16));
+            k.label.setBounds (cell.removeFromTop (14));
             k.slider.setBounds (cell);
         }
-        panelArea.removeFromTop (8);
+        panelArea.removeFromTop (6);
         auto bottomRow = panelArea.removeFromTop (26);
         choke.setBounds (bottomRow.removeFromLeft (90));
         bottomRow.removeFromLeft (16);

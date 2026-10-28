@@ -8,7 +8,8 @@
 //                     possible, chosen at random weighted by that coverage, and pulled hard
 //                     toward the families of locked pads' samples. Generic words (dry, hit,
 //                     room …) aren't families. A pack is the family only when no tag will do:
-//                     a pack mixes kits.
+//                     a pack mixes kits. The style's families (808 for Trap, 909 for House …)
+//                     are three times as likely.
 //                  2. Each unlocked pad takes, with probability 1 − Character, a sample of its
 //                     role from the family; otherwise (or if the family has none) any sample of
 //                     its role. Toms prefer their range, then an unknown range. No sample is used
@@ -17,7 +18,9 @@
 //                One pad's dice is the same with every other pad locked.
 //   KitHistory   undo and redo over the last 20 kits
 //   relocate     a missing sample found again in the library: same file name, then same size,
-//                then the most matching folders (a pack moved, Live renamed)
+//                then the most matching folders (a pack moved, Live renamed). Two equally good
+//                matches are a guess, and refused, unless both have the saved size: then they're
+//                copies of one file (packs share samples), and the first will do.
 #pragma once
 
 #include "../engine/NoteMap.h"
@@ -79,6 +82,7 @@ namespace drumchimp
         std::array<bool, numPads> locked {};
         KitPaths current;                 // kept for locked pads (and a role with no samples)
         float character = 0.25f;          // 0 Matched … 1 Wild
+        std::vector<std::string> preferredFamilies;   // the style's (Style::families)
         uint64_t seed = 1;
     };
 
@@ -168,7 +172,8 @@ namespace drumchimp
                 {
                     const double score = (double) roles.size();
                     const auto locked = lockedFamilies.find (family);
-                    const double weight = score * score * score * (1.0 + 3.0 * (locked != lockedFamilies.end() ? locked->second : 0));
+                    const bool preferred = std::find (request.preferredFamilies.begin(), request.preferredFamilies.end(), family) != request.preferredFamilies.end();
+                    const double weight = score * score * score * (1.0 + 3.0 * (locked != lockedFamilies.end() ? locked->second : 0)) * (preferred ? 3.0 : 1.0);
                     weighted.push_back ({ family, weight });
                     total += weight;
                 }
@@ -288,7 +293,7 @@ namespace drumchimp
 
         const SampleInfo* best = nullptr;
         int bestScore = -1;
-        bool tie = false;
+        bool tie = false, tieAreCopies = true;
         for (const auto& s : index.all())
         {
             const auto parts = components (s.path);
@@ -302,10 +307,14 @@ namespace drumchimp
                 best = &s;
                 bestScore = score;
                 tie = false;
+                tieAreCopies = true;
             }
             else if (score == bestScore)
+            {
                 tie = true;
+                tieAreCopies = tieAreCopies && size > 0 && s.size == size && best->size == size;
+            }
         }
-        return tie ? nullptr : best;          // two equally good: don't guess
+        return tie && ! tieAreCopies ? nullptr : best;
     }
 }
