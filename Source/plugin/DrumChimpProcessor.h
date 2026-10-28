@@ -116,6 +116,7 @@ namespace drumchimp
         Pattern currentPattern() const { return pattern; }
         void newPattern();                // Generate: a new seed
         void toggleStep (int pad, int step);
+        void setStepVelocity (int pad, int step, int velocity);   // 1–127; a hit is made if there's none
         bool isLaneLocked (int pad) const { return laneLocks[(size_t) juce::jlimit (0, numPads - 1, pad)]; }
         void setLaneLocked (int pad, bool shouldLock);
         int playingStep() const noexcept { return playStep.load(); }   // −1 when the generator isn't playing
@@ -134,6 +135,7 @@ namespace drumchimp
 
         juce::AudioProcessorValueTreeState state;
         juce::SharedResourcePointer<Library> library;
+        float uiScale = 1.0f;             // the editor's size (0.7–1.5), saved with the set
 
     private:
         static BusesProperties makeBuses();

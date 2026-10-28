@@ -162,6 +162,29 @@ namespace
         check (onlyThat, "a pad's dice changes only that pad");
         check (changed, "and always to a different sample");
 
+        // A family with a single low tom: re-rolling that pad still changes it (to another family's).
+        std::vector<SampleInfo> few {
+            make ("P", "Kick lone 1", Role::kick, { "lone" }), make ("P", "Snare lone 1", Role::snare, { "lone" }),
+            make ("P", "Tom Lo lone", Role::tom, { "lone" }, TomRange::low), make ("P", "Tom Lo other", Role::tom, { "other" }, TomRange::low),
+            make ("P", "Tom Lo third", Role::tom, { "third" }, TomRange::low),
+        };
+        const LibraryIndex small (std::move (few));
+        KitRequest lone;
+        lone.character = 0.0f;
+        lone.roles = { PadRole::kick, PadRole::snare, PadRole::lowTom, PadRole::perc, PadRole::perc, PadRole::perc, PadRole::perc, PadRole::perc };
+        lone.locked.fill (true);
+        lone.locked[2] = false;
+        lone.current[0] = "/lib/P/Drums/Kick lone 1.wav";
+        lone.current[1] = "/lib/P/Drums/Snare lone 1.wav";
+        lone.current[2] = "/lib/P/Drums/Tom Lo lone.wav";
+        bool moves = true;
+        for (int seed = 1; seed <= 50; ++seed)
+        {
+            lone.seed = (uint64_t) seed;
+            moves = moves && buildKit (small, lone).paths[2] != lone.current[2];
+        }
+        check (moves, "a dice on a family's only low tom still changes the pad");
+
         KitRequest ride;
         ride.roles[7] = PadRole::ride;              // the library has no rides
         ride.current[7] = "/somewhere/Ride.wav";

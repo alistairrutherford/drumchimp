@@ -19,9 +19,18 @@
 //   8. Kits      on the real library: Randomise fills every pad with its role, undo and redo, a
 //                lock holds, a pad's dice, a pad's role, the browser's preview, a kit preset
 //                round trip, roles and locks with the set, and a missing sample found again
-//   6 runs last: the editor with the library and a kit loaded, written to Tests/build/editor.png
+//   6 runs after 8: the editor with the library and a kit loaded, written to Tests/build/editor.png
+//   9. Damaged   NaN, infinite and out-of-range values, a damaged pattern, unknown roles and
+//                elements, garbage: each restores to something sane that plays without NaN
+//   10. Edges    a zero-length block, a block 8 times the prepared size, a sample-rate change and a
+//                reset while playing, 32 instances made and destroyed
+//   11. Size     the editor opens at its saved size, keeps a resize, and saves it with the set
+//   12. Places   a folder added in Settings is scanned and sorted; removed, it's gone
+//   13. CPU      Trap at its busiest, 20 s at 48 kHz / 512: under 2% of a core
+//   14. Snapshot the editor in a known state against Tests/fixtures/snapshot/editor.png
 //
-//   DrumChimpHost
+//   DrumChimpHost [--update-snapshot | --no-library (with DRUMCHIMP_LIBRARY=none)]
+//
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../../Source/plugin/DrumChimpProcessor.h"
 #include <iostream>
@@ -434,6 +443,16 @@ namespace
                 ppq = 0.0;                             // a loop jump
             if (i == 300)
                 setParam (p, "notemap", 1.0f);
+            if (i == 120)
+                p.randomiseKit();                      // a new kit while playing (if the library has one)
+            if (i == 140)
+                p.previewSample (f.click);             // the browser's preview
+            if (i == 160)
+                p.toggleStep (2, 5);                   // a hand edit
+            if (i == 180)
+                setParam (p, "density", 0.9f);         // a new pattern, made by the timer
+            if (i == 250)
+                p.newPattern();
             head.info.setPpqPosition (ppq);
             b.midi.clear();
             for (int k = 0; k < 8; ++k)
@@ -447,7 +466,8 @@ namespace
             ppq += 512 * 128.0 / 60.0 / 48000.0;
         }
         check (p.padSource (3).status == Status::loaded, "the swapped sample loaded mid-play");
-        check (total == 0, "no allocation in 400 blocks of notes, generator, sample swap, loop jump and note-map change ("
+        check (total == 0, "no allocation in 400 blocks of notes, generator, sample swap, Randomise, preview, step edit, new patterns, "
+                           "loop jump and note-map change ("
                                + juce::String (total) + ")");
         p.setPlayHead (nullptr);
     }
@@ -638,24 +658,338 @@ namespace
             out.truncate();
             juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f), out);
         }
+        // And with Settings open: Tests/build/settings.png.
+        for (auto* child : editor->getChildren())
+            if (auto* button = dynamic_cast<juce::Button*> (child->findChildWithID ("settingsButton")))
+            {
+                button->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+                const auto settingsPng = png.getSiblingFile ("settings.png");
+                settingsPng.deleteFile();
+                juce::FileOutputStream settingsOut (settingsPng);
+                juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f), settingsOut);
+            }
         editor.reset();
         check (true, "and closes");
     }
 }
 
-int main()
+namespace
+{
+    bool finite (const juce::AudioBuffer<float>& b)
+    {
+        for (int c = 0; c < b.getNumChannels(); ++c)
+            for (int i = 0; i < b.getNumSamples(); ++i)
+                if (! std::isfinite (b.getSample (c, i)))
+                    return false;
+        return true;
+    }
+
+    // Plays a second with the generator and incoming notes; true if the output stays finite.
+    bool playsCleanly (DrumChimpProcessor& p)
+    {
+        FakePlayHead head;
+        head.info.setIsPlaying (true);
+        head.info.setBpm (120.0);
+        p.setPlayHead (&head);
+        Block b;
+        bool ok = true;
+        double ppq = 0.0;
+        for (int i = 0; i < 94; ++i)
+        {
+            head.info.setPpqPosition (ppq);
+            run (p, b, { { 0, 36, 127 }, { 100, 38, 64 } });
+            ok = ok && finite (b.audio);
+            ppq += 512 * 2.0 / 48000.0;
+        }
+        p.setPlayHead (nullptr);
+        return ok;
+    }
+
+    void testDamagedState (const Files& f)
+    {
+        std::cout << "9. Damaged saved states\n";
+        DrumChimpProcessor good;
+        good.loadSample (0, f.click);
+        juce::MemoryBlock saved;
+        good.getStateInformation (saved);
+        const auto xml = juce::AudioProcessor::getXmlFromBinary (saved.getData(), (int) saved.getSize());
+
+        const auto restoreFrom = [&] (std::function<void (juce::XmlElement&)> damage, const juce::String& what, auto&& expect)
+        {
+            auto copy = std::make_unique<juce::XmlElement> (*xml);
+            damage (*copy);
+            juce::MemoryBlock data;
+            juce::AudioProcessor::copyXmlToBinary (*copy, data);
+            DrumChimpProcessor p;
+            prepare (p);
+            p.setStateInformation (data.getData(), (int) data.getSize());
+            waitFor ([&] { return allSettled (p); });
+            check (playsCleanly (p) && expect (p), what);
+        };
+        const auto paramValue = [] (juce::XmlElement& x, const char* id, const juce::String& value)
+        {
+            for (auto* e : x.getChildIterator())
+                if (e->getStringAttribute ("id") == id)
+                    e->setAttribute ("value", value);
+        };
+
+        restoreFrom ([&] (juce::XmlElement& x) { paramValue (x, "p1_level", "nan"); paramValue (x, "p2_tune", "inf"); }, "NaN and infinity: those parameters keep their values",
+                     [] (DrumChimpProcessor& p) { return std::abs (p.state.getRawParameterValue ("p1_level")->load()) < 0.01f && std::abs (p.state.getRawParameterValue ("p2_tune")->load()) < 0.01f; });
+        restoreFrom ([&] (juce::XmlElement& x) { paramValue (x, "p1_level", "1e9"); paramValue (x, "density", "-5"); }, "out-of-range values are clamped",
+                     [] (DrumChimpProcessor& p) { return p.state.getRawParameterValue ("p1_level")->load() <= 6.0f && p.state.getRawParameterValue ("density")->load() == 0.0f; });
+        restoreFrom ([&] (juce::XmlElement& x)
+                     {
+                         auto* pattern = x.getChildByName ("Pattern");
+                         pattern->setAttribute ("bars", 9999);
+                         for (auto* lane : pattern->getChildIterator())
+                             lane->setAttribute ("cells", "junk;5:200:9:1e30;-3:100:1:0;999999:1:1:0;:::;");
+                     }, "a damaged pattern: sizes and cells kept in range",
+                     [] (DrumChimpProcessor& p) { const auto pt = p.currentPattern(); return pt.steps() <= maxPatternSteps && pt.lanes[0][5].velocity == 127 && pt.lanes[0][5].repeats == 3; });
+        restoreFrom ([&] (juce::XmlElement& x)
+                     {
+                         for (auto* pad : x.getChildByName ("Kit")->getChildIterator())
+                         {
+                             pad->setAttribute ("role", "trombone");
+                             pad->setAttribute ("index", pad->getIntAttribute ("index") + 100);
+                         }
+                         x.addChildElement (new juce::XmlElement ("Unknown"));
+                     }, "unknown roles, pad numbers out of range and unknown elements are ignored",
+                     [] (DrumChimpProcessor& p) { return p.padRole (0) == PadRole::kick && p.padSource (0).status == Status::empty; });
+
+        DrumChimpProcessor p;
+        const char garbage[] = "not a state at all, just some bytes \x01\x02\x03";
+        p.setStateInformation (garbage, (int) sizeof (garbage));
+        p.setStateInformation (nullptr, 0);
+        check (playsCleanly (p), "garbage and empty states are ignored");
+    }
+
+    void testEdges (const Files& f)
+    {
+        std::cout << "10. Edges\n";
+        DrumChimpProcessor p;
+        prepare (p);
+        p.loadSample (0, f.click);
+        waitFor ([&] { return allSettled (p); });
+        juce::AudioBuffer<float> empty (2, 0);
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100), 0);
+        p.processBlock (empty, midi);
+        check (true, "a zero-length block");
+        juce::AudioBuffer<float> big (2, 4096);
+        midi.clear();
+        midi.addEvent (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 127), 4000);
+        p.processBlock (big, midi);
+        check (std::abs (big.getSample (0, 4000) - 1.0f) < 1.0e-4f && finite (big), "a block 8 times bigger than prepared, a hit at 4000 on its sample");
+        p.setRateAndBufferSizeDetails (96000.0, 64);
+        p.prepareToPlay (96000.0, 64);
+        check (playsCleanly (p), "a sample-rate change (96 kHz) while notes sound");
+        p.reset();
+        check (playsCleanly (p), "a reset");
+
+        bool made = true;
+        for (int i = 0; i < 32; ++i)
+        {
+            auto q = std::make_unique<DrumChimpProcessor>();
+            made = made && &*q->library == &*p.library;
+        }
+        check (made, "32 instances made and destroyed, sharing one library");
+    }
+
+    void testEditorScale()
+    {
+        std::cout << "11. Editor size\n";
+        DrumChimpProcessor p;
+        p.uiScale = 1.25f;
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+            check (editor->getWidth() == 1200 && editor->getHeight() == 950, "opens at its saved size (125%: 1200 × 950)");
+            editor->setSize (768, 608);
+            check (std::abs (p.uiScale - 0.8f) < 0.001f, "a resize is kept (80%)");
+        }
+        juce::MemoryBlock state;
+        p.getStateInformation (state);
+        DrumChimpProcessor q;
+        q.setStateInformation (state.getData(), (int) state.getSize());
+        check (std::abs (q.uiScale - 0.8f) < 0.001f, "and saved with the set");
+    }
+
+    void testPlaces (const Files& f)
+    {
+        std::cout << "12. Library places\n";
+        DrumChimpProcessor p;
+        waitFor ([&] { return p.library->index() != nullptr; }, 20000);
+        const auto settingsBefore = Library::settingsFile().existsAsFile() ? Library::settingsFile().loadFileAsString() : juce::String();
+        const bool hadSettings = Library::settingsFile().existsAsFile();
+        const auto folder = f.dir.getChildFile ("My Drums");
+        folder.getChildFile ("Kicks").createDirectory();
+        writeWav (folder.getChildFile ("Kicks/Kick Mine.wav"), 48000.0, 1, 4800, { { 0, 1.0f } });
+        const auto path = folder.getChildFile ("Kicks/Kick Mine.wav").getFullPathName().toStdString();
+
+        auto version = p.library->version();
+        p.library->addFolder (folder);
+        check (waitFor ([&] { return p.library->version() != version; }, 20000) && p.library->extraFolders().contains (folder.getFullPathName()),
+               "a folder added in Settings is scanned");
+        const auto* mine = p.library->index()->find (path);
+        check (mine != nullptr && mine->classification.role == Role::kick && mine->root == "My Drums", "its kick is in the library, sorted as a Kick");
+        version = p.library->version();
+        p.library->removeFolder (folder.getFullPathName());
+        check (waitFor ([&] { return p.library->version() != version; }, 20000) && p.library->index()->find (path) == nullptr, "removed again, it's gone");
+
+        if (hadSettings)
+            Library::settingsFile().replaceWithText (settingsBefore);
+        else
+            Library::settingsFile().deleteFile();
+    }
+
+    void testCpu()
+    {
+        std::cout << "13. CPU\n";
+        DrumChimpProcessor p;
+        prepare (p);
+        waitFor ([&] { return p.padSource (0).status != Status::empty && allSettled (p); }, 20000);
+        setParam (p, "style", 4.0f);                   // Trap, as busy as it gets: rolls on the hats
+        setParam (p, "density", 1.0f);
+        setParam (p, "complexity", 1.0f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        FakePlayHead head;
+        head.info.setIsPlaying (true);
+        head.info.setBpm (140.0);
+        p.setPlayHead (&head);
+        Block b;
+        const int blocks = 48000 * 20 / 512;          // 20 s of audio
+        double ppq = 0.0;
+        const auto start = juce::Time::getMillisecondCounterHiRes();
+        for (int i = 0; i < blocks; ++i)
+        {
+            head.info.setPpqPosition (ppq);
+            run (p, b);
+            ppq += 512 * 140.0 / 60.0 / 48000.0;
+        }
+        const double ms = juce::Time::getMillisecondCounterHiRes() - start;
+        const double percent = 100.0 * ms / (blocks * 512.0 / 48.0);
+        check (percent < 2.0, "Trap at full Density and Complexity, 48 kHz, 512: " + juce::String (percent, 3) + "% of one core (target under 2%)");
+        p.setPlayHead (nullptr);
+    }
+
+    // The editor in a known state, compared with Tests/fixtures/snapshot/editor.png (this Mac's
+    // fonts; --update writes it). The library status (this Mac's library) is masked.
+    void testSnapshot (bool update)
+    {
+        std::cout << "14. Editor snapshot\n";
+        DrumChimpProcessor p;
+        waitFor ([&] { return p.library->index() != nullptr && p.padSource (0).status != Status::empty && allSettled (p); }, 20000);
+        juce::MemoryBlock state;
+        p.getStateInformation (state);
+        auto xml = juce::AudioProcessor::getXmlFromBinary (state.getData(), (int) state.getSize());
+        auto* pattern = xml->getChildByName ("Pattern");
+        pattern->setAttribute ("seed", "12345");
+        pattern->deleteAllChildElements();         // restored empty, then made from the seed below
+        juce::AudioProcessor::copyXmlToBinary (*xml, state);
+        p.setStateInformation (state.getData(), (int) state.getSize());
+        waitFor ([&] { return allSettled (p); });
+        setParam (p, "density", 0.6f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+
+        std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+        editor->setSize (960, 760);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
+        for (auto* child : editor->getChildren())     // the editor's one child is its content, at scale 1 here
+            if (auto* found = child->findChildWithID ("libraryStatus"))
+            {
+                juce::Graphics g (image);
+                g.setColour (juce::Colours::black);
+                g.fillRect (found->getBounds());
+            }
+
+        const auto reference = juce::File (__FILE__).getParentDirectory().getSiblingFile ("fixtures").getChildFile ("snapshot/editor.png");
+        if (update)
+        {
+            reference.getParentDirectory().createDirectory();
+            reference.deleteFile();
+            juce::FileOutputStream out (reference);
+            juce::PNGImageFormat().writeImageToStream (image, out);
+            std::cout << "  wrote " << reference.getFullPathName() << "\n";
+            return;
+        }
+        const auto expected = juce::ImageFileFormat::loadFrom (reference);
+        if (! expected.isValid())
+        {
+            check (false, "no reference image: run DrumChimpHost --update-snapshot once");
+            return;
+        }
+        int differing = 0;
+        for (int y = 0; y < std::min (image.getHeight(), expected.getHeight()); ++y)
+            for (int x = 0; x < std::min (image.getWidth(), expected.getWidth()); ++x)
+            {
+                const auto a = image.getPixelAt (x, y), e = expected.getPixelAt (x, y);
+                if (std::abs (a.getRed() - e.getRed()) > 8 || std::abs (a.getGreen() - e.getGreen()) > 8 || std::abs (a.getBlue() - e.getBlue()) > 8)
+                    ++differing;
+            }
+        const double share = 100.0 * differing / (image.getWidth() * image.getHeight());
+        check (image.getBounds() == expected.getBounds() && share < 0.2, "matches the reference (" + juce::String (share, 3) + "% of pixels differ)");
+        if (share >= 0.2)
+        {
+            const auto now = juce::File (__FILE__).getParentDirectory().getSiblingFile ("build").getChildFile ("snapshot-now.png");
+            now.deleteFile();
+            juce::FileOutputStream out (now);
+            juce::PNGImageFormat().writeImageToStream (image, out);
+            std::cout << "        this run's image: " << now.getFullPathName() << "\n";
+        }
+    }
+
+    // With DRUMCHIMP_LIBRARY=none: a Mac without Ableton's library.
+    void testNoLibrary (const Files& f)
+    {
+        std::cout << "No library (DRUMCHIMP_LIBRARY=none)\n";
+        DrumChimpProcessor p;
+        prepare (p);
+        check (waitFor ([&] { return p.library->index() != nullptr; }, 20000) && p.library->index()->size() == 0, "the library is empty");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+        bool empty = true;
+        for (int pad = 0; pad < numPads; ++pad)
+            empty = empty && p.padSource (pad).status == Status::empty;
+        check (empty, "no default kit: the pads are empty");
+        p.randomiseKit();
+        check (! p.canUndo() && p.kitPaths()[0].empty(), "Randomise does nothing (and leaves nothing to undo)");
+        check (playsCleanly (p), "the generator runs silent");
+        p.loadSample (0, f.click);
+        waitFor ([&] { return allSettled (p); });
+        check (p.padSource (0).status == Status::loaded, "a sample still loads by hand");
+        std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        check (editor != nullptr, "the editor opens");
+    }
+}
+
+int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
+    const juce::StringArray args (argv + 1, argc - 1);
     {
         Files files;
-        testSamples (files);
-        testGenerator (files);
-        testState (files);
-        testRealtime (files);
-        testDefaultKit();
-        testLibrary();
-        testKits (files);
-        testEditor (files);
+        if (args.contains ("--no-library"))
+            testNoLibrary (files);
+        else if (args.contains ("--update-snapshot"))
+            testSnapshot (true);
+        else
+        {
+            testSamples (files);
+            testGenerator (files);
+            testState (files);
+            testRealtime (files);
+            testDefaultKit();
+            testLibrary();
+            testKits (files);
+            testEditor (files);
+            testDamagedState (files);
+            testEdges (files);
+            testEditorScale();
+            testPlaces (files);
+            testCpu();
+            testSnapshot (false);
+        }
     }
     std::cout << (failures == 0 ? "\nDrumChimpHost: all passed\n" : "\n*** DrumChimpHost: " + std::to_string (failures) + " failure(s)\n");
     return failures == 0 ? 0 : 1;

@@ -312,15 +312,180 @@ namespace drumchimp
         }
     }
 
-    void StepGrid::mouseDown (const juce::MouseEvent& e)
+    bool StepGrid::cellAt (juce::Point<int> p, int& pad, int& step) const
     {
         const auto cells = cellArea();
-        if (! cells.contains (e.getPosition()) || pattern.steps() <= 0)
+        if (! cells.contains (p) || pattern.steps() <= 0)
+            return false;
+        step = juce::jlimit (0, pattern.steps() - 1, (int) ((float) (p.x - cells.getX()) * (float) pattern.steps() / (float) cells.getWidth()));
+        pad = juce::jlimit (0, numPads - 1, (p.y - cells.getY()) / (cells.getHeight() / numPads));
+        return true;
+    }
+
+    // An empty step: a click adds a hit. A hit: drag up or down for its velocity, or click to remove it.
+    void StepGrid::mouseDown (const juce::MouseEvent& e)
+    {
+        pressedPad = pressedStep = -1;
+        dragged = false;
+        int pad, step;
+        if (! cellAt (e.getPosition(), pad, step))
             return;
-        const int step = (int) ((float) (e.x - cells.getX()) * (float) pattern.steps() / (float) cells.getWidth());
-        const int pad = (e.y - cells.getY()) / (cells.getHeight() / numPads);
-        processor.toggleStep (pad, step);
+        const int velocity = pattern.lanes[(size_t) pad][(size_t) step].velocity;
+        if (velocity == 0)
+        {
+            processor.toggleStep (pad, step);
+            refresh();
+            return;
+        }
+        pressedPad = pad;
+        pressedStep = step;
+        pressedVelocity = velocity;
+    }
+
+    void StepGrid::mouseDrag (const juce::MouseEvent& e)
+    {
+        if (pressedPad < 0 || (! dragged && e.getDistanceFromDragStart() < 3))
+            return;
+        dragged = true;
+        processor.setStepVelocity (pressedPad, pressedStep, pressedVelocity - e.getDistanceFromDragStartY());
         refresh();
+        setTooltip ("Velocity " + juce::String (pattern.lanes[(size_t) pressedPad][(size_t) pressedStep].velocity));
+    }
+
+    void StepGrid::mouseUp (const juce::MouseEvent&)
+    {
+        if (pressedPad >= 0 && ! dragged)
+        {
+            processor.toggleStep (pressedPad, pressedStep);
+            refresh();
+        }
+        pressedPad = pressedStep = -1;
+    }
+
+    //==========================================================================
+    SettingsPanel::SettingsPanel (DrumChimpProcessor& p) : processor (p)
+    {
+        list.setRowHeight (40);
+        list.setColour (juce::ListBox::backgroundColourId, background);
+        addAndMakeVisible (list);
+        add.setTooltip ("Add a folder of your own samples to the library");
+        add.onClick = [this]
+        {
+            chooser = std::make_unique<juce::FileChooser> ("Add a folder of samples", juce::File::getSpecialLocation (juce::File::userMusicDirectory));
+            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                                  [this] (const juce::FileChooser& fc)
+            {
+                if (const auto folder = fc.getResult(); folder.isDirectory())
+                    processor.library->addFolder (folder);
+                refresh();
+            });
+        };
+        remove.onClick = [this]
+        {
+            if (const int row = list.getSelectedRow(); row >= 0 && row < (int) places.size() && places[(size_t) row].removable)
+                processor.library->removeFolder (places[(size_t) row].path);
+            refresh();
+        };
+        rescan.onClick = [this] { processor.library->rescan(); refresh(); };
+        close.onClick = [this] { if (onClose) onClose(); };
+        for (auto* b : { &add, &remove, &rescan, &close })
+            addAndMakeVisible (*b);
+        note.setFont (font (12.0f));
+        note.setColour (juce::Label::textColourId, dim);
+        note.setJustificationType (juce::Justification::topLeft);
+        addAndMakeVisible (note);
+        refresh();
+    }
+
+    void SettingsPanel::refresh()
+    {
+        places.clear();
+        const auto index = processor.library->index();
+        const auto extras = processor.library->extraFolders();
+        if (index != nullptr)
+            for (const auto& r : index->scannedRoots())
+            {
+                Place place { kindName (r.kind), r.name, r.path, extras.contains (juce::String (r.path)), 0, 0 };
+                const auto prefix = r.path + "/";
+                for (const auto& s : index->all())
+                    if (s.path.compare (0, prefix.size(), prefix) == 0)
+                    {
+                        ++place.samples;
+                        place.drums += s.classification.role != Role::unsorted ? 1 : 0;
+                    }
+                places.push_back (place);
+            }
+        for (const auto& e : extras)              // added, not scanned yet
+            if (std::none_of (places.begin(), places.end(), [&] (const Place& p) { return p.path == e; }))
+                places.push_back ({ "Folder", juce::File (e).getFileName(), e, true, 0, 0 });
+        list.updateContent();
+        list.repaint();
+        selectedRowsChanged (list.getSelectedRow());
+
+        const auto status = processor.library->status();
+        juce::String text = status.scanning ? "Scanning..." : "Scanned in " + juce::String (juce::roundToInt (status.milliseconds)) + " ms.";
+        text << " Places come from Live's own library settings (the Core Library, your User Library, Places) and folders added here.";
+        if (status.protectedFiles > 0)
+            text << "\n" << (int) status.protectedFiles << " samples in your installed Ableton Packs are protected: only Live can play them, "
+                 << "so DrumChimp leaves them out.";
+        note.setText (text, juce::dontSendNotification);
+    }
+
+    void SettingsPanel::selectedRowsChanged (int row)
+    {
+        remove.setEnabled (row >= 0 && row < (int) places.size() && places[(size_t) row].removable);
+    }
+
+    void SettingsPanel::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
+    {
+        if (row < 0 || row >= (int) places.size())
+            return;
+        const auto& p = places[(size_t) row];
+        if (selected)
+        {
+            g.setColour (raised);
+            g.fillRect (0, 0, width, height);
+        }
+        auto r = juce::Rectangle<int> (0, 0, width, height).reduced (10, 4);
+        auto top = r.removeFromTop (r.getHeight() / 2);
+        g.setFont (font (11.5f));
+        g.setColour (faint);
+        const bool packOnlyLivePlays = p.kind == kindName (LibraryRoot::Kind::pack) && p.samples == 0;   // its samples are protected
+        g.drawText (packOnlyLivePlays ? juce::String ("protected: only Live plays these")
+                                      : juce::String (p.samples) + " samples, " + juce::String (p.drums) + " drums",
+                    top.removeFromRight (240), juce::Justification::centredRight);
+        g.setFont (font (13.0f, true));
+        g.setColour (text);
+        g.drawText (p.name + "  ", top, juce::Justification::centredLeft);
+        g.setFont (font (11.5f));
+        g.setColour (dim);
+        g.drawText (p.kind + " · " + p.path, r, juce::Justification::centredLeft);
+    }
+
+    void SettingsPanel::paint (juce::Graphics& g)
+    {
+        g.fillAll (panel);
+        g.setColour (outline);
+        g.drawRect (getLocalBounds(), 1);
+        g.setColour (text);
+        g.setFont (font (16.0f, true));
+        g.drawText ("Library places", 20, 14, 300, 24, juce::Justification::centredLeft);
+    }
+
+    void SettingsPanel::resized()
+    {
+        auto r = getLocalBounds().reduced (20).withTrimmedTop (34);
+        auto buttons = r.removeFromBottom (28);
+        close.setBounds (buttons.removeFromRight (90));
+        buttons.removeFromRight (8);
+        rescan.setBounds (buttons.removeFromRight (90));
+        add.setBounds (buttons.removeFromLeft (120));
+        buttons.removeFromLeft (8);
+        remove.setBounds (buttons.removeFromLeft (130));
+        r.removeFromBottom (10);
+        note.setBounds (r.removeFromBottom (52));
+        r.removeFromBottom (8);
+        list.setBounds (r);
     }
 
     //==========================================================================
@@ -442,8 +607,10 @@ namespace drumchimp
 
     //==========================================================================
     DrumChimpEditor::DrumChimpEditor (DrumChimpProcessor& p)
-        : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; }), grid (p)
+        : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; }), grid (p), settings (p)
     {
+        addAndMakeVisible (content);
+        content.onPaint = [this] (juce::Graphics& g) { paintContent (g); };
         lookAndFeel.setColourScheme ({ background, panel, raised, outline, text, accent, text, raised, text });
         lookAndFeel.setColour (juce::Slider::rotarySliderFillColourId, accent);
         lookAndFeel.setColour (juce::Slider::rotarySliderOutlineColourId, outline);
@@ -462,9 +629,9 @@ namespace drumchimp
         noteMap.addItemList ({ "GM", "Chromatic" }, 1);
         noteMap.setTooltip ("Which notes play the pads. GM: the General MIDI drum notes (they also play a Drum Rack). Chromatic: C1 to G1");
         noteMapAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "notemap", noteMap);
-        addAndMakeVisible (source);
-        addAndMakeVisible (noteMap);
-        addAndMakeVisible (dragHandle);
+        content.addAndMakeVisible (source);
+        content.addAndMakeVisible (noteMap);
+        content.addAndMakeVisible (dragHandle);
 
         randomise.setTooltip ("A new kit from your library for every unlocked pad");
         randomise.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
@@ -474,7 +641,7 @@ namespace drumchimp
         kits.setTooltip ("Save this kit (samples, roles and sounds) or load a saved one");
         kits.onClick = [this] { showKitsMenu(); };
         for (auto* b : { &randomise, &undo, &redo, &kits })
-            addAndMakeVisible (*b);
+            content.addAndMakeVisible (*b);
 
         characterLabel.setText ("Matched", juce::dontSendNotification);
         characterLabel.setFont (font (12.0f));
@@ -484,24 +651,24 @@ namespace drumchimp
         characterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, "character", character);
         familyLabel.setFont (font (12.0f));
         familyLabel.setColour (juce::Label::textColourId, dim);
-        addAndMakeVisible (characterLabel);
-        addAndMakeVisible (character);
-        addAndMakeVisible (familyLabel);
+        content.addAndMakeVisible (characterLabel);
+        content.addAndMakeVisible (character);
+        content.addAndMakeVisible (familyLabel);
 
         for (int i = 0; i < numPads; ++i)
         {
             pads.push_back (std::make_unique<PadButton> (p, i, [this] (int pad) { select (pad); }));
-            addAndMakeVisible (*pads.back());
+            content.addAndMakeVisible (*pads.back());
         }
-        addAndMakeVisible (browser);
+        content.addAndMakeVisible (browser);
 
         padTitle.setFont (font (15.0f, true));
         padTitle.setColour (juce::Label::textColourId, text);
         padSample.setFont (font (12.0f));
         padSample.setColour (juce::Label::textColourId, dim);
         padSample.setJustificationType (juce::Justification::topLeft);
-        addAndMakeVisible (padTitle);
-        addAndMakeVisible (padSample);
+        content.addAndMakeVisible (padTitle);
+        content.addAndMakeVisible (padSample);
 
         for (int r = 0; r < numPadRoles; ++r)
             padRole.addItem (padRoleNames[(size_t) r], r + 1);
@@ -511,12 +678,12 @@ namespace drumchimp
             processor.setPadRole (selected, (PadRole) (padRole.getSelectedId() - 1));
             browser.refresh();
         };
-        addAndMakeVisible (padRole);
+        content.addAndMakeVisible (padRole);
 
         loadButton.onClick = [this] { chooseSample(); };
         clearButton.onClick = [this] { processor.clearPad (selected); };
-        addAndMakeVisible (loadButton);
-        addAndMakeVisible (clearButton);
+        content.addAndMakeVisible (loadButton);
+        content.addAndMakeVisible (clearButton);
 
         const std::array<const char*, 5> names { "Level", "Pan", "Tune", "Decay", "Velocity" };
         for (size_t i = 0; i < knobs.size(); ++i)
@@ -538,29 +705,46 @@ namespace drumchimp
         generate.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
         generate.onClick = [this] { processor.newPattern(); };
         for (auto* c : std::initializer_list<juce::Component*> { &style, &bars, &fill, &ghosts, &generate })
-            addAndMakeVisible (*c);
+            content.addAndMakeVisible (*c);
         const std::array<const char*, 4> patternNames { "Density", "Complexity", "Swing", "Humanise" };
         for (size_t i = 0; i < patternKnobs.size(); ++i)
         {
             setUpKnob (patternKnobs[i], patternNames[i]);
             patternKnobAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, patternKnobs[i].id, patternKnobs[i].slider);
         }
-        addAndMakeVisible (grid);
+        content.addAndMakeVisible (grid);
         choke.addItemList (params::chokeGroups, 1);
         choke.setTooltip ("Choke group: a pad cuts off the other pads in its group (the hats share A)");
-        addAndMakeVisible (choke);
-        addAndMakeVisible (mute);
-        addAndMakeVisible (solo);
+        content.addAndMakeVisible (choke);
+        content.addAndMakeVisible (mute);
+        content.addAndMakeVisible (solo);
 
         status.setFont (font (12.0f));
         status.setColour (juce::Label::textColourId, faint);
-        addAndMakeVisible (status);
+        content.addAndMakeVisible (status);
         libraryStatus.setFont (font (12.0f));
         libraryStatus.setColour (juce::Label::textColourId, faint);
         libraryStatus.setJustificationType (juce::Justification::centredRight);
-        addAndMakeVisible (libraryStatus);
+        libraryStatus.setComponentID ("libraryStatus");      // the snapshot test masks it: it's this Mac's
+        content.addAndMakeVisible (libraryStatus);
 
-        setSize (960, 760);
+        settingsButton.setTooltip ("The library's places: add your own folders, rescan");
+        settingsButton.setComponentID ("settingsButton");
+        settingsButton.onClick = [this]
+        {
+            settings.refresh();
+            settings.setVisible (! settings.isVisible());
+            settings.toFront (false);
+        };
+        content.addAndMakeVisible (settingsButton);
+        settings.onClose = [this] { settings.setVisible (false); };
+        content.addChildComponent (settings);
+
+        const float scale = processor.uiScale;   // read first: the limits below resize (and resized() saves the size)
+        setResizable (true, true);
+        setResizeLimits (baseWidth * 7 / 10, baseHeight * 7 / 10, baseWidth * 3 / 2, baseHeight * 3 / 2);
+        getConstrainer()->setFixedAspectRatio ((double) baseWidth / baseHeight);
+        setSize (juce::roundToInt (baseWidth * scale), juce::roundToInt (baseHeight * scale));
         select (0);
         startTimerHz (30);
     }
@@ -580,8 +764,8 @@ namespace drumchimp
         k.label.setJustificationType (juce::Justification::centred);
         k.label.setFont (font (12.0f));
         k.label.setColour (juce::Label::textColourId, dim);
-        addAndMakeVisible (k.slider);
-        addAndMakeVisible (k.label);
+        content.addAndMakeVisible (k.slider);
+        content.addAndMakeVisible (k.label);
     }
 
     void DrumChimpEditor::select (int pad)
@@ -700,6 +884,8 @@ namespace drumchimp
         {
             seenLibrary = processor.library->version();
             browser.refresh();
+            if (settings.isVisible())
+                settings.refresh();
         }
 
         if (processor.patternVersion() != seenPattern || processor.kitVersion() != seenKit)
@@ -730,6 +916,20 @@ namespace drumchimp
             status.setText ("Notes are coming in while the generator plays: set Source to MIDI In to hear only the clip", juce::dontSendNotification);
             status.setColour (juce::Label::textColourId, warning);
         }
+        else if (const auto problem = [this]
+                 {
+                     juce::StringArray pads;
+                     for (int pad = 0; pad < numPads; ++pad)
+                         if (const auto st = processor.padSource (pad).status; st == Status::missing || st == Status::failed)
+                             pads.add (juce::String (pad + 1));
+                     return pads;
+                 }(); ! problem.isEmpty())
+        {
+            status.setText ((problem.size() == 1 ? "Pad " + problem[0] + "'s sample" : "Pads " + problem.joinIntoString (", ") + ": samples")
+                                + " can't be found or played. Select a pad to see why; drop a new sample on it, or Load...",
+                            juce::dontSendNotification);
+            status.setColour (juce::Label::textColourId, warning);
+        }
         else
         {
             status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
@@ -751,6 +951,20 @@ namespace drumchimp
     void DrumChimpEditor::paint (juce::Graphics& g)
     {
         g.fillAll (background);
+    }
+
+    void DrumChimpEditor::resized()
+    {
+        const float scale = (float) getWidth() / (float) baseWidth;
+        content.setTransform (juce::AffineTransform::scale (scale));
+        content.setBounds (0, 0, baseWidth, baseHeight);
+        processor.uiScale = scale;
+        layout();
+    }
+
+    void DrumChimpEditor::paintContent (juce::Graphics& g)
+    {
+        g.fillAll (background);
         g.setColour (text);
         g.setFont (font (18.0f, true));
         g.drawText ("DrumChimp", 16, 12, 200, 28, juce::Justification::centredLeft);
@@ -762,15 +976,18 @@ namespace drumchimp
         g.fillRoundedRectangle (grid.getBounds().toFloat().expanded (10.0f, 8.0f), 6.0f);
     }
 
-    void DrumChimpEditor::resized()
+    void DrumChimpEditor::layout()
     {
-        auto r = getLocalBounds().reduced (16);
+        settings.setBounds (content.getLocalBounds().reduced (120, 90));
+        auto r = content.getLocalBounds().reduced (16);
         auto top = r.removeFromTop (28);
         dragHandle.setBounds (top.removeFromRight (120));
         top.removeFromRight (10);
         noteMap.setBounds (top.removeFromRight (110));
         top.removeFromRight (8);
         source.setBounds (top.removeFromRight (120));
+        top.removeFromRight (8);
+        settingsButton.setBounds (top.removeFromRight (90));
         r.removeFromTop (12);
 
         auto kitBar = r.removeFromTop (28);

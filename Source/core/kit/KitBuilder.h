@@ -210,27 +210,26 @@ namespace drumchimp
             const auto range = wantedRange (padRole);
             const bool matched = ! result.family.empty() && random.uniform() >= request.character;
 
-            // Candidates, best group first: [family?] × [range, unknown range, any range].
+            // Candidates, best group first: [family?] × [range, unknown range, any range]. A re-roll
+            // avoids the pad's current sample: the first group with anything else wins (found in
+            // Phase 6: a family with one low tom kept re-rolling to it); only if nothing else
+            // anywhere will do does the pad keep it.
             std::vector<size_t> pool;
-            for (int familyPass = matched ? 0 : 1; familyPass < 2 && pool.empty(); ++familyPass)
-                for (int rangePass = range == TomRange::unknown ? 2 : 0; rangePass < 3 && pool.empty(); ++rangePass)
-                    for (const auto i : ofRole)
-                    {
-                        const auto& s = index.all()[i];
-                        if (used.count (s.path) > 0 || (familyPass == 0 && ! inFamily (s)))
-                            continue;
-                        const auto r = s.classification.tomRange;
-                        if ((rangePass == 0 && r != range) || (rangePass == 1 && r != TomRange::unknown))
-                            continue;
-                        pool.push_back (i);
-                    }
+            for (const bool allowCurrent : { false, true })
+                for (int familyPass = matched ? 0 : 1; familyPass < 2 && pool.empty(); ++familyPass)
+                    for (int rangePass = range == TomRange::unknown ? 2 : 0; rangePass < 3 && pool.empty(); ++rangePass)
+                        for (const auto i : ofRole)
+                        {
+                            const auto& s = index.all()[i];
+                            if (used.count (s.path) > 0 || (familyPass == 0 && ! inFamily (s)) || (! allowCurrent && s.path == request.current[(size_t) pad]))
+                                continue;
+                            const auto r = s.classification.tomRange;
+                            if ((rangePass == 0 && r != range) || (rangePass == 1 && r != TomRange::unknown))
+                                continue;
+                            pool.push_back (i);
+                        }
             if (pool.empty())
                 continue;                         // nothing for this role: the pad keeps its sample
-
-            // A re-roll avoids the pad's current sample when there's anything else.
-            if (pool.size() > 1)
-                pool.erase (std::remove_if (pool.begin(), pool.end(), [&] (size_t i) { return index.all()[i].path == request.current[(size_t) pad]; }),
-                            pool.end());
             const auto& chosen = index.all()[pool[random.below (pool.size())]];
             result.paths[(size_t) pad] = chosen.path;
             used.insert (chosen.path);

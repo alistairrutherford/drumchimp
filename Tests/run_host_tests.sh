@@ -3,7 +3,8 @@
 # editor) and runs it. Needs Xcode and JUCE 8.0.14 at ~/Development/JUCE (the module path in
 # DrumChimpHost.jucer), with Projucer built (Tools/install.sh builds it once).
 #
-#   Tests/run_host_tests.sh
+#   Tests/run_host_tests.sh                     everything, then again as a Mac with no library
+#   Tests/run_host_tests.sh --update-snapshot   write a new reference image (after a deliberate UI change)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,4 +17,7 @@ if ! xcodebuild -project "$HERE/Host/Builds/MacOSX/DrumChimpHost.xcodeproj" -con
     echo "the build failed (see $HERE/build/host-build.log)" >&2
     exit 1
 fi
-"$HERE/Host/Builds/MacOSX/build/Release/DrumChimpHost"
+"$HERE/Host/Builds/MacOSX/build/Release/DrumChimpHost" "$@"
+if [[ " $* " != *" --update-snapshot "* ]]; then
+    DRUMCHIMP_LIBRARY=none "$HERE/Host/Builds/MacOSX/build/Release/DrumChimpHost" --no-library
+fi

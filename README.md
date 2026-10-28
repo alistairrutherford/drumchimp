@@ -4,7 +4,9 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 5 is done (PLAN.md §10).
+**Status:** Phase 6 is done (PLAN.md §10). The editor resizes (drag the corner), Settings
+lists the library's places and adds your own folders, and you can drag a hit in the step grid to
+set its velocity.
 - **Into Live:** the pattern records on another track through *MIDI From*, every note within a
   sample of its beat, checked by the Live tests. *Drag MIDI* drops it on a clip slot. If a
   dragged clip and the generator both play, the status line says to set Source to *MIDI In*.
@@ -35,7 +37,8 @@ Restart Live afterwards: Live keeps a plug-in's old binary loaded until it quits
 
 ```sh
 Tests/run_tests.sh            # core tests (no JUCE)
-Tests/run_host_tests.sh       # processor tests (JUCE console app): loading, timing, state, no allocation
+Tests/run_host_tests.sh       # processor tests (JUCE console app): loading, timing, state, no allocation, CPU, damaged
+                              #   states, the editor snapshot; then again with no library (--update-snapshot: new reference)
 python3 Tests/live/run_live_tests.py   # in Live (ClaudeLiveBridge running): MIDI From timing, swing, state
 Tests/run_validation.sh       # pluginval strictness 10 on the installed VST3
 Tools/classify.sh             # scan and classify the Ableton library: timings, counts (--csv FILE: every sample, --kits N: example kits)

@@ -5,7 +5,12 @@
 //
 //   index()    the latest finished index (null until the first scan ends); any thread
 //   status()   for the editor
-//   rescan()   scan again (Phase 3's Settings)
+//   rescan()   scan again (Settings)
+//   addFolder(), removeFolder(), extraFolders()
+//              folders added in DrumChimp's Settings, besides what Live's Library.cfg lists. Kept
+//              in ~/Library/Application Support/DrumChimp/settings.json; a change rescans.
+//
+// DRUMCHIMP_LIBRARY=none in the environment scans nothing (the tests of a Mac with no library).
 #pragma once
 
 #include <juce_core/juce_core.h>
@@ -31,7 +36,14 @@ namespace drumchimp
         juce::uint32 version() const noexcept { return versions.load(); }   // changes with each finished scan
         void rescan();
 
+        juce::StringArray extraFolders() const;
+        void addFolder (const juce::File& folder);
+        void removeFolder (const juce::String& path);
+
         static juce::File cacheFile();
+        static juce::File settingsFile();
+        // Live's places on this Mac (LibraryRoots.h), or none with DRUMCHIMP_LIBRARY=none.
+        static std::vector<LibraryRoot> liveRoots();
 
     private:
         void run() override;
@@ -39,6 +51,7 @@ namespace drumchimp
         mutable juce::CriticalSection lock;
         std::shared_ptr<const LibraryIndex> current;
         Status lastStatus;
+        juce::StringArray extras;
         std::atomic<bool> cancel { false }, again { false };
         std::atomic<juce::uint32> versions { 0 };
     };

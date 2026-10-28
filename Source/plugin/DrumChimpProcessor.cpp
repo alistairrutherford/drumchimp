@@ -211,8 +211,7 @@ namespace drumchimp
     void DrumChimpProcessor::loadDefaultKit()
     {
         defaultKitTried = true;
-        const char* home = std::getenv ("HOME");
-        for (const auto& root : detectRoots (home != nullptr ? home : ""))
+        for (const auto& root : Library::liveRoots())
             if (root.kind == LibraryRoot::Kind::coreLibrary)
             {
                 for (int pad = 0; pad < numPads; ++pad)
@@ -478,7 +477,8 @@ namespace drumchimp
             const auto& p = pads->getReference (pad);
             roles[(size_t) pad] = padRoleFromId (p["role"].toString().toStdString(), defaultPadRoles[(size_t) pad]);
             for (const char* setting : { "level", "pan", "tune", "decay", "vel", "choke" })
-                if (auto* param = state.getParameter (params::padID (pad, setting)); param != nullptr && p.hasProperty (setting))
+                if (auto* param = state.getParameter (params::padID (pad, setting)); param != nullptr && p.hasProperty (setting)
+                    && std::isfinite ((double) p[setting]))
                     param->setValueNotifyingHost (param->convertTo0to1 ((float) (double) p[setting]));
             paths[(size_t) pad] = p["path"].toString().toStdString();
         }
@@ -592,6 +592,20 @@ namespace drumchimp
         publishPattern();                 // a setting change makes a new pattern: hand edits last until then
     }
 
+    void DrumChimpProcessor::setStepVelocity (int pad, int step, int velocity)
+    {
+        if (pad < 0 || pad >= numPads || step < 0 || step >= pattern.steps())
+            return;
+        auto& cell = pattern.lanes[(size_t) pad][(size_t) step];
+        const auto v = (uint8_t) juce::jlimit (1, 127, velocity);
+        if (cell.velocity == v)
+            return;
+        cell.velocity = v;
+        if (cell.repeats < 1)
+            cell.repeats = 1;
+        publishPattern();
+    }
+
     void DrumChimpProcessor::setLaneLocked (int pad, bool shouldLock)
     {
         if (pad >= 0 && pad < numPads && laneLocks[(size_t) pad] != shouldLock)
@@ -620,6 +634,7 @@ namespace drumchimp
     void DrumChimpProcessor::getStateInformation (juce::MemoryBlock& dest)
     {
         auto tree = state.copyState();
+        tree.setProperty ("uiScale", uiScale, nullptr);
         juce::ValueTree kitTree ("Kit");
         {
             const juce::ScopedLock sl (kitLock);
@@ -659,6 +674,12 @@ namespace drumchimp
         const auto patternTree = tree.getChildWithName ("Pattern");
         tree.removeChild (kitTree, nullptr);
         tree.removeChild (patternTree, nullptr);
+        // A damaged set: a value that isn't a finite number keeps the parameter's value instead
+        // (NaN would reach the audio as NaN). Out-of-range values are clamped by the parameters.
+        for (auto child : tree)
+            if (child.hasType ("PARAM") && child.hasProperty ("value") && ! std::isfinite ((double) child.getProperty ("value")))
+                child.removeProperty ("value", nullptr);
+        uiScale = juce::jlimit (0.7f, 1.5f, (float) (double) tree.getProperty ("uiScale", 1.0));
         state.replaceState (tree);
 
         stateRestored = true;

@@ -1,4 +1,5 @@
-// The editor (PLAN.md §5), Phase 4.
+// The editor (PLAN.md §5), Phase 6. Everything is laid out at 960 × 760 in `content`, which is
+// scaled to the window: drag the corner to resize (70%–150%, kept with the set).
 //
 //   Header      Source (Generator / MIDI In), Note map (GM / Chromatic), and the drag handle:
 //               the pattern as a .mid to drop on a clip slot
@@ -14,8 +15,12 @@
 //   Pattern     Style, Bars, Fill, Ghost notes, Generate (a new seed), and Density, Complexity,
 //               Swing and Humanise
 //   Step grid   the pattern: a lane per pad, velocity as brightness, rolls as dots, the playhead.
-//               Click a step to add or remove a hit; lock a lane to keep it through Generate.
-//   Status      transport, notes in and out; the library scan
+//               Click a step to add or remove a hit, drag a hit up or down for its velocity; lock a
+//               lane to keep it through Generate.
+//   Settings    the library's places (from Live, and folders added here), Add folder, Remove,
+//               Rescan; why Ableton Pack samples aren't there
+//   Status      transport, notes in and out, or a warning (a clip doubling the generator, a
+//               missing sample); the library scan
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -90,21 +95,27 @@ namespace drumchimp
     };
 
     // The pattern, a lane per pad.
-    class StepGrid : public juce::Component
+    class StepGrid : public juce::Component,
+                     public juce::SettableTooltipClient
     {
     public:
         explicit StepGrid (DrumChimpProcessor& p);
         void paint (juce::Graphics&) override;
         void resized() override;
         void mouseDown (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
         void refresh();                    // the pattern, the locks or the pads' roles changed
         void setPlayhead (int step);
 
     private:
         juce::Rectangle<int> cellArea() const;
+        bool cellAt (juce::Point<int> p, int& pad, int& step) const;
 
         DrumChimpProcessor& processor;
         Pattern pattern;
+        int pressedPad = -1, pressedStep = -1, pressedVelocity = 0;
+        bool dragged = false;
         std::vector<std::unique_ptr<IconButton>> locks;
         int playhead = -1;
         static constexpr int labelWidth = 92;
@@ -138,6 +149,31 @@ namespace drumchimp
         std::vector<const SampleInfo*> rows;
     };
 
+    // The library's places, over the rest of the editor.
+    class SettingsPanel : public juce::Component,
+                          private juce::ListBoxModel
+    {
+    public:
+        explicit SettingsPanel (DrumChimpProcessor& p);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+        void refresh();
+        std::function<void()> onClose;
+
+    private:
+        struct Place { juce::String kind, name, path; bool removable; int samples, drums; };
+        int getNumRows() override { return (int) places.size(); }
+        void paintListBoxItem (int row, juce::Graphics&, int width, int height, bool selected) override;
+        void selectedRowsChanged (int) override;
+
+        DrumChimpProcessor& processor;
+        juce::ListBox list { "Places", this };
+        juce::TextButton add { "Add folder..." }, remove { "Remove folder" }, rescan { "Rescan" }, close { "Close" };
+        juce::Label note;
+        std::vector<Place> places;
+        std::unique_ptr<juce::FileChooser> chooser;
+    };
+
     class DrumChimpEditor : public juce::AudioProcessorEditor,
                             public juce::DragAndDropContainer,
                             private juce::Timer
@@ -157,7 +193,16 @@ namespace drumchimp
             const char* id;
         };
 
+        struct Content : juce::Component
+        {
+            std::function<void (juce::Graphics&)> onPaint;
+            void paint (juce::Graphics& g) override { if (onPaint) onPaint (g); }
+        };
+        static constexpr int baseWidth = 960, baseHeight = 760;
+
         void timerCallback() override;
+        void layout();
+        void paintContent (juce::Graphics&);
         void select (int pad);
         void refreshPads();
         void chooseSample();
@@ -167,7 +212,9 @@ namespace drumchimp
 
         DrumChimpProcessor& processor;
         juce::LookAndFeel_V4 lookAndFeel;
+        Content content;                   // first: every other component is its child
         juce::TooltipWindow tooltips { this };
+        juce::TextButton settingsButton { "Settings" };
 
         juce::ComboBox source, noteMap;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment, noteMapAttachment;
@@ -203,6 +250,7 @@ namespace drumchimp
         std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> styleAttachment, barsAttachment, fillAttachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ghostsAttachment;
         StepGrid grid;
+        SettingsPanel settings;
         juce::uint32 seenPattern = ~0u;
         juce::uint32 doubledUntil = 0;     // ms: the status line warns until then
 

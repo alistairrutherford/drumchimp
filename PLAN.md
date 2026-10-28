@@ -625,5 +625,52 @@ Getting patterns into Live (§3.6).
 - **What Live last ran:** the Phase 4 build. The Phase 5 build adds only the warning, which the
   host tests check. `pluginval` strictness 10 passes.
 
-**Next:** Phase 6, UI and hardening: a fuller editor, performance tuning, missing-file reporting,
-and a fresh-Mac install check.
+### Phase 6 (2026-10-28): done, G9 and G10 pass
+
+UI and hardening.
+
+- **Editor:**
+  - **Resizable:** drag the corner, from 70% to 150%. The whole 960 × 760 layout scales, and the
+    size is saved with the set.
+  - **Settings:** shows the library's places with their sample and drum counts, marks the Packs
+    as protected, adds and removes your own folders (kept in
+    `~/Library/Application Support/DrumChimp/settings.json`, shared by every instance), and
+    rescans.
+  - **Step grid:** drag a hit up or down to set its velocity.
+  - **Status line:** names the pads whose samples are missing or can't be played.
+- **G9, everything survives:**
+  - **Damaged states** restore to something sane that plays with no NaN: NaN, infinite and
+    out-of-range values; a pattern with 9,999 bars and junk cells; unknown roles, pad numbers
+    and elements; garbage bytes.
+  - **Kit presets** skip non-finite values.
+  - Saving and duplicating were already covered (Phases 3–5).
+- **G10, real-time safe:** no allocation in 400 blocks that now also include Randomise, a
+  preview, a hand edit and two new patterns while playing. Also checked:
+  - a zero-length block, and a block 8 times the prepared size (with a hit on its exact sample);
+  - a sample-rate change and a reset while notes sound;
+  - 32 instances made and destroyed.
+- **CPU:** Trap at full Density and Complexity (rolls on the hats), 48 kHz / 512, takes
+  **0.095%** of one core. The target was under 2%.
+- **UI snapshot test:**
+  - The editor in a known state (the default kit, Rock from a fixed seed) is compared with
+    `Tests/fixtures/snapshot/editor.png`, which is tied to this Mac's fonts.
+  - The library status, which is this Mac's own, is masked.
+  - `Tests/run_host_tests.sh --update-snapshot` writes a new reference after a deliberate change.
+- **No library** (`DRUMCHIMP_LIBRARY=none`, run by `Tests/run_host_tests.sh` as a second pass):
+  the library is empty, there's no default kit, Randomise does nothing and leaves nothing to
+  undo, the generator runs silent, samples still load by hand, and the editor opens.
+- **Clean-copy build:** the sources without any build output, in a new folder, pass the core
+  tests, build, install and pass `pluginval` strictness 10. A second account or Mac wasn't
+  available, so this stands in for a fresh clone.
+- **Found on the way:** a pad's dice could keep its sample. When the first candidate group (the
+  family, then the tom range) held only the pad's current sample, it was chosen again. The new
+  host tests caught it; the made-up library in `test_kit` always had three per family. Now the
+  first group with anything else wins, with a new test.
+- **Not done:**
+  - **Notarisation** needs a *Developer ID Application* certificate. This Mac has only *Apple
+    Development*, so builds stay ad-hoc signed, which is fine for this Mac.
+  - The editor's new pieces haven't been seen in Live: Live still runs the Phase 4 build.
+
+**Next:** Phase 7, the optional extras: Send to Clip (route C), curated kits from Ableton's Drum
+Rack presets, an audio-feature fallback for the classifier, more styles, multi-out, and 3/4 and
+6/8.
