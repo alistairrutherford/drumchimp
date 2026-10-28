@@ -4,8 +4,11 @@
 // row per sample (root, path, seconds, role, confidence, tom range, tags, reason) for reading the
 // misses, and for picking fixture paths (Tests/fixtures/classifier_labels.csv).
 //
-//   Tools/classify.sh [--csv out.csv]
-#include "core/library/LibraryIndex.h"
+// With --kits N, N kits from the kit builder (core/kit/KitBuilder.h) at Matched, halfway and Wild,
+// to hear them by eye.
+//
+//   Tools/classify.sh [--csv out.csv] [--kits N]
+#include "core/kit/KitBuilder.h"
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -39,9 +42,14 @@ namespace
 int main (int argc, char** argv)
 {
     std::string csvPath;
+    int kits = 0;
     for (int i = 1; i < argc; ++i)
+    {
         if (std::string (argv[i]) == "--csv" && i + 1 < argc)
             csvPath = argv[++i];
+        else if (std::string (argv[i]) == "--kits" && i + 1 < argc)
+            kits = std::atoi (argv[++i]);
+    }
 
     const char* home = std::getenv ("HOME");
     const auto roots = detectRoots (home != nullptr ? home : "");
@@ -95,5 +103,21 @@ int main (int argc, char** argv)
         }
         std::cout << "\nCSV: " << csvPath << "\n";
     }
+
+    for (const float character : { 0.0f, 0.5f, 1.0f })
+        for (int k = 1; k <= kits; ++k)
+        {
+            KitRequest request;
+            request.character = character;
+            request.seed = (uint64_t) (k * 7919 + (int) (character * 100));
+            const auto kit = buildKit (index, request);
+            std::cout << "\nKit " << k << ", Character " << std::setprecision (1) << character << ", family " << kit.family << "\n";
+            for (int pad = 0; pad < numPads; ++pad)
+            {
+                const auto* s = index.find (kit.paths[(size_t) pad]);
+                std::cout << "  " << std::left << std::setw (11) << padRoleName (defaultPadRoles[(size_t) pad])
+                          << (s != nullptr ? s->root + " / " + s->relative.substr (s->relative.rfind ('/') + 1) : std::string ("-")) << "\n";
+            }
+        }
     return 0;
 }

@@ -178,19 +178,32 @@ test set.
 
 ### 3.3 Kit builder and Randomise
 
-- **Build kit:** for each unlocked pad, choose a sample of the pad's role from the index.
-- **Coherence**, set by a *Character* knob, from *Matched* to *Wild*:
-  - *Matched*: choose a family first (for example 909, or *Acoustified*), then fill each pad from
-    that family. If the family has nothing for a role, use the same pack, then any sample.
-  - *Wild*: choose each pad independently.
-  - In between, each pad is drawn with a weighting that favours the kit's family.
-- **Style-aware kits** (optional; on by default): the selected style biases the families it
-  chooses. Trap and Hip-Hop favour 808, Techno and House favour 909, and Rock, Funk and Jazz
-  favour acoustic families.
-- **Randomise** re-rolls every unlocked pad. Each pad also has its own **dice** button. A
-  **kit history** (the last 20 kits) gives undo and redo.
-- **Kit presets:** save a kit (samples plus pad settings) as a user preset (JSON); load it in
-  any project.
+*As built in Phase 3* (`Source/core/kit/KitBuilder.h`).
+
+- **Pad roles:** each pad has a role: Kick, Snare, Clap, Rim, Closed hat, Open hat, Low, Mid or
+  High tom, Crash, Ride or Perc. Set it in the pad panel. The role decides what Randomise and the
+  pad's dice pick, and what the browser shows. Toms prefer their range, then an unknown one.
+- **Families:** a family is a tag in the samples' names that runs across many roles (808, 909,
+  707, 505, DMX, *Acoustified*, *Kindified*, *Electrified*, *Session*, *Canvas*, …). Generic words
+  (dry, hit, room, stick …) aren't families. A pack is used as the family only when no tag
+  qualifies, because a pack mixes kits.
+- **Character**, from *Matched* to *Wild* (a parameter, default 25%):
+  - Randomise first chooses a family that covers as many of the unlocked pads' roles as it can.
+    The choice is random, weighted by that coverage (cubed), and four times as likely per locked
+    pad already in the family.
+  - Each unlocked pad then takes a sample from the family with probability 1 − Character. If the
+    family has nothing for the role, it takes any sample of the role.
+  - On this Mac, Matched gives kits such as an all-707 kit, an *Electrified* kit or a *Canvas*
+    kit (`Tools/classify.sh --kits N` prints some).
+- **Randomise** re-rolls every unlocked pad. Each pad's **dice** re-rolls only it, always to a
+  different sample. No sample is used twice in a kit. A role with nothing in the library keeps
+  its sample. Every kit change can be undone: Randomise, a dice, a drop, Load…, Clear, or loading
+  a kit preset. **Undo/Redo** keep the last 20 kits for the session; they aren't saved with the set.
+- **Kit presets** (*Kits* menu): the samples, roles and sound settings (level, pan, tune, decay,
+  velocity, choke) as JSON in `~/Library/Application Support/DrumChimp/Kits/`. A preset can be
+  loaded in any project.
+- **Style-aware kits** (Trap and Hip-Hop toward 808, Techno and House toward 909, Rock and Jazz
+  toward acoustic) wait for the styles, in Phase 4.
 
 ### 3.4 Pattern generator
 
@@ -467,5 +480,38 @@ The library scanner and the classifier (§3.2 describes them as built).
 - **Not yet checked in Live:** Live still has the Phase 1 build loaded. The scan runs the same way
   in any host, and the host tests run it in-process.
 
-**Next:** Phase 3, kits. The kit builder, Character, locks, Randomise, the library browser and
-kit presets.
+### Phase 3 (2026-10-28): done, G4, G5, G6 and G9 (for kits) pass in the tests
+
+Kits: §3.3 describes them as built.
+
+- **G4, a real-kit-style kit in one click:** **Randomise kit** fills each pad with a sample of
+  its role. At Matched, all from one family, 200/200 times in the tests. On this Mac, Randomise
+  from the default 909 kit changed all eight pads, each to its role.
+- **G5, Randomise with locks, and undo:** locked pads never change. A pad's dice changes only that
+  pad. Undo and Redo walk the last 20 kits.
+- **G6, assigning samples by hand:** DrumChimp's own **browser**. It is filtered to the selected
+  pad's role (or any role, or everything) and searchable. Clicking a sample plays it through a
+  ninth *preview* voice, which no pad uses; double-clicking or dragging it onto a pad loads it.
+  Drops from Live's browser and Finder still work.
+- **G9 for kits:** roles and locks are saved with the set. A missing sample is looked for in the
+  library: the same file name, then the same saved size, then the most matching folders. It's
+  never a guess between two equally good matches. If found, it loads from there and the pad
+  panel says *Found again: it was at …*. The tests move the default kick to a drive that doesn't
+  exist and it comes back.
+- **Kit presets:** saved and loaded from the *Kits* menu (samples, roles and sounds). A JSON
+  that isn't a kit is refused.
+- **Editor** (960 × 640): a kit bar (Randomise, Undo, Redo, Character, the family chosen, Kits),
+  a lock and a dice on every pad, a role menu in the pad panel, and the browser.
+- **Tests:**
+  - `test_kit` (a made-up library): roles, Matched vs Wild over 200 seeds, no repeats, locks and
+    their pull on the family, dice, tom ranges, the same seed giving the same kit, a role with no
+    samples, history and relocation.
+  - `test_sampler` adds the preview slot.
+  - The host tests add everything above on the real library.
+  - `pluginval` strictness 10 passes.
+- **Found while building:** the first version let a pack be a family, which mixed kits. 56 of
+  200 Matched kits weren't one family until tags came first.
+- **Not yet checked in Live:** Live still has the Phase 1 build loaded.
+
+**Next:** Phase 4, patterns. The style library, the pattern generator, the sequencer synced to
+the host, and the step grid.

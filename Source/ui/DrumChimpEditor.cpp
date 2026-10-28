@@ -27,10 +27,17 @@ namespace drumchimp
             return juce::File (s.path).getFileNameWithoutExtension();
         }
 
-        juce::StringArray audioFileTypes()
+        juce::String fileName (const SampleInfo& s)
         {
-            return { "*.wav", "*.aif", "*.aiff", "*.flac" };
+            const auto slash = s.relative.rfind ('/');
+            auto name = s.relative.substr (slash == std::string::npos ? 0 : slash + 1);
+            if (const auto dot = name.rfind ('.'); dot != std::string::npos)
+                name.erase (dot);
+            return name;
         }
+
+        // Browser filter items: 1 = the selected pad's role, then each role, then everything.
+        constexpr int padRoleItem = 1, firstRoleItem = 2, allItem = firstRoleItem + numRoles;
     }
 
     //==========================================================================
@@ -83,9 +90,62 @@ namespace drumchimp
     }
 
     //==========================================================================
+    IconButton::IconButton (Icon i, const juce::String& tip) : juce::Button (tip), icon (i)
+    {
+        setTooltip (tip);
+        setClickingTogglesState (icon == Icon::lock);
+    }
+
+    void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
+    {
+        const auto r = getLocalBounds().toFloat().reduced (3.0f);
+        const bool on = getToggleState();
+        g.setColour (on ? accent : highlighted || down ? drumchimp::text : faint);   // (Button has its own `text`)
+        if (icon == Icon::lock)
+        {
+            const auto body = r.withTrimmedTop (r.getHeight() * 0.45f);
+            g.fillRoundedRectangle (body, 1.5f);
+            juce::Path shackle;
+            const float w = body.getWidth() * 0.62f, x = body.getCentreX() - w / 2.0f;
+            const float top = r.getY() + 1.0f, bottom = body.getY();
+            shackle.startNewSubPath (x, bottom);
+            shackle.lineTo (x, top + w / 2.0f);
+            shackle.addArc (x, top, w, w, -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi);
+            if (on)
+                shackle.lineTo (x + w, bottom);
+            else
+                shackle.lineTo (x + w, top + w / 2.0f + 1.0f);    // open: the shackle stops short
+            g.strokePath (shackle, juce::PathStrokeType (1.6f));
+        }
+        else
+        {
+            g.drawRoundedRectangle (r.reduced (0.5f), 2.5f, 1.4f);
+            const float d = r.getWidth() / 4.0f;
+            for (const auto& [px, py] : { std::pair { 1, 1 }, { 3, 3 }, { 1, 3 }, { 3, 1 }, { 2, 2 } })
+                g.fillEllipse (r.getX() + px * d - 1.3f, r.getY() + py * d - 1.3f, 2.6f, 2.6f);
+        }
+    }
+
+    //==========================================================================
     PadButton::PadButton (DrumChimpProcessor& p, int i, std::function<void (int)> select)
         : processor (p), index (i), onSelect (std::move (select))
     {
+        lock.onClick = [this] { processor.setLocked (index, lock.getToggleState()); };
+        dice.onClick = [this]
+        {
+            processor.randomisePad (index);
+            onSelect (index);
+        };
+        addAndMakeVisible (lock);
+        addAndMakeVisible (dice);
+    }
+
+    void PadButton::resized()
+    {
+        auto r = getLocalBounds().reduced (10, 8).removeFromBottom (20);
+        lock.setBounds (r.removeFromLeft (20));
+        r.removeFromLeft (4);
+        dice.setBounds (r.removeFromLeft (20));
     }
 
     void PadButton::refresh (bool isSelected, NoteMap map)
@@ -93,6 +153,7 @@ namespace drumchimp
         source = processor.padSource (index);
         selected = isSelected;
         noteMap = map;
+        lock.setToggleState (processor.isLocked (index), juce::dontSendNotification);
         setTooltip (source.message.isNotEmpty() ? source.message : source.path);
         repaint();
     }
@@ -117,15 +178,15 @@ namespace drumchimp
         auto inner = r.reduced (9.0f, 7.0f).toNearestInt();
         g.setFont (font (13.0f, true));
         g.setColour (text);
-        g.drawText (defaultRoles[(size_t) index], inner.removeFromTop (18), juce::Justification::topLeft);
+        g.drawText (padRoleName (processor.padRole (index)), inner.removeFromTop (18), juce::Justification::topLeft);
+        auto bottom = inner.removeFromBottom (20);
         g.setFont (font (11.0f));
         g.setColour (faint);
-        g.drawText (juce::MidiMessage::getMidiNoteName (noteForPad (noteMap, index), true, true, 3), inner.removeFromBottom (14),
-                    juce::Justification::bottomRight);
+        g.drawText (juce::MidiMessage::getMidiNoteName (noteForPad (noteMap, index), true, true, 3), bottom, juce::Justification::bottomRight);
         const bool problem = source.status == Status::missing || source.status == Status::failed;
         g.setColour (problem ? warning : source.status == Status::loaded ? dim : faint);
         g.setFont (font (12.0f));
-        g.drawFittedText (sampleName (source), inner, juce::Justification::topLeft, 3, 0.9f);
+        g.drawFittedText (sampleName (source), inner, juce::Justification::topLeft, 4, 0.9f);
     }
 
     void PadButton::mouseDown (const juce::MouseEvent&)
@@ -136,22 +197,150 @@ namespace drumchimp
 
     void PadButton::filesDropped (const juce::StringArray& files, int, int)
     {
-        dragOver = false;
+        setDragOver (false);
         if (! files.isEmpty())
             processor.loadSample (index, juce::File (files[0]));
         onSelect (index);
     }
 
+    void PadButton::itemDropped (const SourceDetails& d)
+    {
+        setDragOver (false);
+        processor.loadSample (index, juce::File (d.description.toString()));
+        onSelect (index);
+    }
+
+    //==========================================================================
+    Browser::Browser (DrumChimpProcessor& p, std::function<int()> selectedPadFn)
+        : processor (p), selectedPad (std::move (selectedPadFn))
+    {
+        role.addItem ("The pad's role", padRoleItem);
+        role.addSeparator();
+        for (int r = 0; r < numRoles; ++r)
+            role.addItem (roleNames[(size_t) r], firstRoleItem + r);
+        role.addItem ("Everything", allItem);
+        role.setSelectedId (padRoleItem, juce::dontSendNotification);
+        role.onChange = [this] { filter(); };
+        addAndMakeVisible (role);
+
+        search.setTextToShowWhenEmpty ("Search", faint);
+        search.onTextChange = [this] { filter(); };
+        addAndMakeVisible (search);
+
+        list.setRowHeight (22);
+        list.setColour (juce::ListBox::backgroundColourId, panel);
+        list.setOutlineThickness (0);
+        addAndMakeVisible (list);
+
+        hint.setFont (font (11.5f));
+        hint.setColour (juce::Label::textColourId, faint);
+        hint.setText (juce::String (juce::CharPointer_UTF8 ("Click to hear \xc2\xb7 double-click, or drag onto a pad, to load")), juce::dontSendNotification);
+        addAndMakeVisible (hint);
+    }
+
+    void Browser::resized()
+    {
+        auto r = getLocalBounds();
+        auto top = r.removeFromTop (26);
+        role.setBounds (top.removeFromLeft (150));
+        top.removeFromLeft (8);
+        search.setBounds (top);
+        r.removeFromTop (6);
+        hint.setBounds (r.removeFromBottom (18));
+        list.setBounds (r);
+    }
+
+    void Browser::refresh()
+    {
+        index = processor.library->index();
+        filter();
+    }
+
+    void Browser::filter()
+    {
+        rows.clear();
+        if (index != nullptr)
+        {
+            const int id = role.getSelectedId();
+            const auto wanted = id == padRoleItem ? libraryRole (processor.padRole (selectedPad())) : (Role) (id - firstRoleItem);
+            const auto words = juce::StringArray::fromTokens (search.getText().toLowerCase(), " ", "");
+            const auto matches = [&] (const SampleInfo& s)
+            {
+                if (words.isEmpty())
+                    return true;
+                const auto haystack = juce::String (s.root + " " + s.relative).toLowerCase();
+                for (const auto& w : words)
+                    if (w.isNotEmpty() && ! haystack.contains (w))
+                        return false;
+                return true;
+            };
+            if (id == allItem)
+            {
+                for (const auto& s : index->all())
+                    if (matches (s))
+                        rows.push_back (&s);
+            }
+            else
+                for (const auto i : index->withRole (wanted))
+                    if (matches (index->all()[i]))
+                        rows.push_back (&index->all()[i]);
+        }
+        list.updateContent();
+        list.deselectAllRows();
+        list.repaint();
+    }
+
+    void Browser::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool isSelected)
+    {
+        if (row < 0 || row >= (int) rows.size())
+            return;
+        const auto& s = *rows[(size_t) row];
+        if (isSelected)
+        {
+            g.setColour (raised);
+            g.fillRect (0, 0, width, height);
+        }
+        auto r = juce::Rectangle<int> (0, 0, width, height).reduced (8, 0);
+        g.setFont (font (11.0f));
+        g.setColour (faint);
+        g.drawText (juce::String (s.root), r.removeFromRight (120), juce::Justification::centredRight);
+        g.setFont (font (12.5f));
+        g.setColour (isSelected ? text : dim);
+        g.drawText (fileName (s), r, juce::Justification::centredLeft);
+    }
+
+    void Browser::listBoxItemClicked (int row, const juce::MouseEvent&)
+    {
+        if (row >= 0 && row < (int) rows.size())
+            processor.previewSample (juce::File (rows[(size_t) row]->path));
+    }
+
+    void Browser::listBoxItemDoubleClicked (int row, const juce::MouseEvent&)
+    {
+        if (row >= 0 && row < (int) rows.size())
+            processor.loadSample (selectedPad(), juce::File (rows[(size_t) row]->path));
+    }
+
+    juce::var Browser::getDragSourceDescription (const juce::SparseSet<int>& selectedRows)
+    {
+        const int row = selectedRows.isEmpty() ? -1 : selectedRows[0];
+        return row >= 0 && row < (int) rows.size() ? juce::var (juce::String (rows[(size_t) row]->path)) : juce::var();
+    }
+
     //==========================================================================
     DrumChimpEditor::DrumChimpEditor (DrumChimpProcessor& p)
-        : AudioProcessorEditor (p), processor (p), dragHandle (p)
+        : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; })
     {
         lookAndFeel.setColourScheme ({ background, panel, raised, outline, text, accent, text, raised, text });
         lookAndFeel.setColour (juce::Slider::rotarySliderFillColourId, accent);
         lookAndFeel.setColour (juce::Slider::rotarySliderOutlineColourId, outline);
         lookAndFeel.setColour (juce::Slider::thumbColourId, text);
+        lookAndFeel.setColour (juce::Slider::trackColourId, accent);
+        lookAndFeel.setColour (juce::Slider::backgroundColourId, outline);
         lookAndFeel.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         lookAndFeel.setColour (juce::ToggleButton::tickColourId, accent);
+        lookAndFeel.setColour (juce::TextEditor::backgroundColourId, raised);
+        lookAndFeel.setColour (juce::TextEditor::outlineColourId, outline);
         setLookAndFeel (&lookAndFeel);
 
         source.addItemList ({ "Generator", "MIDI In" }, 1);
@@ -164,11 +353,34 @@ namespace drumchimp
         addAndMakeVisible (noteMap);
         addAndMakeVisible (dragHandle);
 
+        randomise.setTooltip ("A new kit from your library for every unlocked pad");
+        randomise.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
+        randomise.onClick = [this] { processor.randomiseKit(); };
+        undo.onClick = [this] { processor.undoKit(); };
+        redo.onClick = [this] { processor.redoKit(); };
+        kits.setTooltip ("Save this kit (samples, roles and sounds) or load a saved one");
+        kits.onClick = [this] { showKitsMenu(); };
+        for (auto* b : { &randomise, &undo, &redo, &kits })
+            addAndMakeVisible (*b);
+
+        characterLabel.setText ("Matched", juce::dontSendNotification);
+        characterLabel.setFont (font (12.0f));
+        characterLabel.setColour (juce::Label::textColourId, dim);
+        characterLabel.setJustificationType (juce::Justification::centredRight);
+        character.setTooltip ("Randomise: Matched keeps a kit to one family (a machine, a pack's sound); Wild takes any sample of each role");
+        characterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, "character", character);
+        familyLabel.setFont (font (12.0f));
+        familyLabel.setColour (juce::Label::textColourId, dim);
+        addAndMakeVisible (characterLabel);
+        addAndMakeVisible (character);
+        addAndMakeVisible (familyLabel);
+
         for (int i = 0; i < numPads; ++i)
         {
             pads.push_back (std::make_unique<PadButton> (p, i, [this] (int pad) { select (pad); }));
             addAndMakeVisible (*pads.back());
         }
+        addAndMakeVisible (browser);
 
         padTitle.setFont (font (15.0f, true));
         padTitle.setColour (juce::Label::textColourId, text);
@@ -177,6 +389,16 @@ namespace drumchimp
         padSample.setJustificationType (juce::Justification::topLeft);
         addAndMakeVisible (padTitle);
         addAndMakeVisible (padSample);
+
+        for (int r = 0; r < numPadRoles; ++r)
+            padRole.addItem (padRoleNames[(size_t) r], r + 1);
+        padRole.setTooltip ("What this pad is for: what Randomise and its dice pick, and what the browser shows");
+        padRole.onChange = [this]
+        {
+            processor.setPadRole (selected, (PadRole) (padRole.getSelectedId() - 1));
+            browser.refresh();
+        };
+        addAndMakeVisible (padRole);
 
         loadButton.onClick = [this] { chooseSample(); };
         clearButton.onClick = [this] { processor.clearPad (selected); };
@@ -210,7 +432,7 @@ namespace drumchimp
         libraryStatus.setJustificationType (juce::Justification::centredRight);
         addAndMakeVisible (libraryStatus);
 
-        setSize (780, 430);
+        setSize (960, 640);
         select (0);
         startTimerHz (30);
     }
@@ -223,6 +445,7 @@ namespace drumchimp
 
     void DrumChimpEditor::select (int pad)
     {
+        const bool changed = pad != selected;
         selected = juce::jlimit (0, numPads - 1, pad);
         for (size_t i = 0; i < knobs.size(); ++i)
         {
@@ -237,27 +460,36 @@ namespace drumchimp
         soloAttachment.reset();
         soloAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.state, params::padID (selected, "solo"), solo);
         refreshPads();
+        if (changed || seenLibrary == ~0u)
+            browser.refresh();
     }
 
     void DrumChimpEditor::refreshPads()
     {
         seenKit = processor.kitVersion();
-        seenLibrary = processor.library->version();
         seenMap = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
         for (int i = 0; i < numPads; ++i)
             pads[(size_t) i]->refresh (i == selected, seenMap);
 
         const auto s = processor.padSource (selected);
-        padTitle.setText ("Pad " + juce::String (selected + 1) + " · " + defaultRoles[(size_t) selected], juce::dontSendNotification);
+        padTitle.setText ("Pad " + juce::String (selected + 1), juce::dontSendNotification);
+        padRole.setSelectedId ((int) processor.padRole (selected) + 1, juce::dontSendNotification);
+
         // Where the library has it: its place and how the classifier sorted it.
         juce::String where;
         if (const auto index = processor.library->index(); index != nullptr && s.path.isNotEmpty())
             if (const auto* info = index->find (s.path.toStdString()))
-                where = juce::String (info->root) + " · " + roleName (info->classification.role) + " · " + juce::String (info->seconds, 2) + " s\n";
-        padSample.setText (s.message.isNotEmpty() ? s.message : s.path.isNotEmpty() ? where + s.path : juce::String ("Empty: drop a sample on the pad, or Load..."),
+                where = juce::String (info->root) + " · sorted as " + roleName (info->classification.role) + " · " + juce::String (info->seconds, 2) + " s\n";
+        const bool problem = s.status == Status::missing || s.status == Status::failed;
+        padSample.setText (s.path.isEmpty() ? juce::String ("Empty: drop a sample on the pad, or Load...")
+                                            : (s.message.isNotEmpty() ? s.message + "\n" : juce::String()) + where + s.path,
                            juce::dontSendNotification);
-        padSample.setColour (juce::Label::textColourId, s.message.isNotEmpty() ? warning : dim);
+        padSample.setColour (juce::Label::textColourId, problem ? warning : dim);
         clearButton.setEnabled (s.status != Status::empty);
+        undo.setEnabled (processor.canUndo());
+        redo.setEnabled (processor.canRedo());
+        const auto family = processor.lastFamily();
+        familyLabel.setText (family.isEmpty() ? juce::String() : "Family: " + family, juce::dontSendNotification);
     }
 
     void DrumChimpEditor::chooseSample()
@@ -265,7 +497,7 @@ namespace drumchimp
         const auto current = processor.padSource (selected).path;
         chooser = std::make_unique<juce::FileChooser> ("Choose a sample for pad " + juce::String (selected + 1),
                                                        current.isNotEmpty() ? juce::File (current).getParentDirectory() : juce::File(),
-                                                       audioFileTypes().joinIntoString (";"));
+                                                       "*.wav;*.aif;*.aiff;*.flac");
         chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this, pad = selected] (const juce::FileChooser& fc)
         {
@@ -274,17 +506,60 @@ namespace drumchimp
         });
     }
 
+    void DrumChimpEditor::showKitsMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addItem ("Save kit...", [this] { saveKit(); });
+        const auto presets = processor.kitPresets();
+        menu.addSeparator();
+        if (presets.isEmpty())
+            menu.addItem ("No saved kits yet", false, false, [] {});
+        for (const auto& file : presets)
+            menu.addItem (file.getFileNameWithoutExtension(), [this, file]
+            {
+                juce::String error;
+                if (! processor.loadKitPreset (file, error))
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Kit not loaded", error);
+                select (selected);
+                browser.refresh();
+            });
+        menu.addSeparator();
+        menu.addItem ("Show kits folder", [] { DrumChimpProcessor::kitsFolder().createDirectory(); DrumChimpProcessor::kitsFolder().revealToUser(); });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (kits));
+    }
+
+    void DrumChimpEditor::saveKit()
+    {
+        const auto family = processor.lastFamily();
+        saveWindow = std::make_unique<juce::AlertWindow> ("Save kit", "A name for this kit:", juce::MessageBoxIconType::NoIcon, this);
+        saveWindow->addTextEditor ("name", family.isNotEmpty() ? family + " kit" : juce::String ("My kit"));
+        saveWindow->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        saveWindow->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        saveWindow->enterModalState (true, juce::ModalCallbackFunction::create ([safe = juce::Component::SafePointer<DrumChimpEditor> (this)] (int result)
+        {
+            if (safe == nullptr)
+                return;
+            if (result == 1)
+            {
+                juce::String error;
+                if (! safe->processor.saveKitPreset (safe->saveWindow->getTextEditorContents ("name"), error))
+                    juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Kit not saved", error);
+            }
+            safe->saveWindow.reset();
+        }), false);
+    }
+
     void DrumChimpEditor::timerCallback()
     {
         const auto map = (NoteMap) juce::roundToInt (processor.state.getRawParameterValue ("notemap")->load());
-        if (processor.kitVersion() != seenKit || map != seenMap || processor.library->version() != seenLibrary)
+        const bool libraryChanged = processor.library->version() != seenLibrary;
+        if (processor.kitVersion() != seenKit || map != seenMap || libraryChanged)
             refreshPads();
-
-        const auto lib = processor.library->status();
-        libraryStatus.setText (lib.scanning && lib.samples == 0 ? juce::String ("Library: scanning...")
-                                   : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "
-                                         + juce::String ((int) lib.roots) + " places" + (lib.scanning ? juce::String (" (scanning again)") : juce::String()),
-                               juce::dontSendNotification);
+        if (libraryChanged)
+        {
+            seenLibrary = processor.library->version();
+            browser.refresh();
+        }
 
         const auto played = processor.takeHits();
         for (int i = 0; i < numPads; ++i)
@@ -295,10 +570,19 @@ namespace drumchimp
                 pads[(size_t) i]->fade();
         }
 
+        const float c = processor.state.getRawParameterValue ("character")->load();
+        characterLabel.setText (c < 0.34f ? "Matched" : c < 0.67f ? "Mixed" : "Wild", juce::dontSendNotification);
+
         const auto s = processor.status();
         status.setText (juce::String (s.playing ? "Playing" : "Stopped") + " · " + juce::String (s.bpm, 1) + " BPM · beat "
                             + juce::String (s.ppq, 2) + " · notes in " + juce::String (s.notesIn) + ", out " + juce::String (s.notesOut),
                         juce::dontSendNotification);
+        const auto lib = processor.library->status();
+        libraryStatus.setText (lib.scanning && lib.samples == 0 ? juce::String ("Library: scanning...")
+                                   : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "
+                                         + juce::String ((int) lib.roots) + " places" + (lib.scanning ? juce::String (" (scanning again)") : juce::String()),
+                               juce::dontSendNotification);
+        randomise.setEnabled (processor.library->index() != nullptr);
     }
 
     void DrumChimpEditor::paint (juce::Graphics& g)
@@ -308,9 +592,9 @@ namespace drumchimp
         g.setFont (font (18.0f, true));
         g.drawText ("DrumChimp", 16, 12, 200, 28, juce::Justification::centredLeft);
 
-        auto panelArea = getLocalBounds().reduced (16).withTrimmedTop (44).withTrimmedBottom (26).withTrimmedLeft (436);
         g.setColour (panel);
-        g.fillRoundedRectangle (panelArea.toFloat(), 6.0f);
+        g.fillRoundedRectangle (browserArea.toFloat(), 6.0f);
+        g.fillRoundedRectangle (padPanelArea.toFloat(), 6.0f);
     }
 
     void DrumChimpEditor::resized()
@@ -322,25 +606,48 @@ namespace drumchimp
         noteMap.setBounds (top.removeFromRight (110));
         top.removeFromRight (8);
         source.setBounds (top.removeFromRight (120));
-        r.removeFromTop (16);
-        auto statusRow = r.removeFromBottom (20);
-        libraryStatus.setBounds (statusRow.removeFromRight (340));
-        status.setBounds (statusRow);
-        r.removeFromBottom (6);
+        r.removeFromTop (12);
 
-        auto padArea = r.removeFromLeft (420);
+        auto kitBar = r.removeFromTop (28);
+        randomise.setBounds (kitBar.removeFromLeft (130));
+        kitBar.removeFromLeft (8);
+        undo.setBounds (kitBar.removeFromLeft (60));
+        kitBar.removeFromLeft (4);
+        redo.setBounds (kitBar.removeFromLeft (60));
+        kitBar.removeFromLeft (16);
+        characterLabel.setBounds (kitBar.removeFromLeft (64));
+        character.setBounds (kitBar.removeFromLeft (150));
+        kitBar.removeFromLeft (12);
+        kits.setBounds (kitBar.removeFromRight (80));
+        familyLabel.setBounds (kitBar);
+        r.removeFromTop (14);
+
+        auto statusRow = r.removeFromBottom (20);
+        libraryStatus.setBounds (statusRow.removeFromRight (380));
+        status.setBounds (statusRow);
+        r.removeFromBottom (8);
+
+        auto padArea = r.removeFromLeft (440);
         const int w = padArea.getWidth() / 4, h = padArea.getHeight() / 2;
         for (int i = 0; i < numPads; ++i)
             pads[(size_t) i]->setBounds (padArea.getX() + (i % 4) * w, padArea.getY() + (i / 4) * h, w, h);
+        r.removeFromLeft (16);
 
-        auto panelArea = r.withTrimmedLeft (16).reduced (14, 12);
-        auto titleRow = panelArea.removeFromTop (24);
+        browserArea = r.removeFromTop (r.getHeight() - 270);
+        browser.setBounds (browserArea.reduced (12, 10));
+        r.removeFromTop (10);
+        padPanelArea = r;
+
+        auto panelArea = padPanelArea.reduced (14, 12);
+        auto titleRow = panelArea.removeFromTop (26);
         clearButton.setBounds (titleRow.removeFromRight (60));
         titleRow.removeFromRight (6);
         loadButton.setBounds (titleRow.removeFromRight (70));
-        padTitle.setBounds (titleRow);
-        padSample.setBounds (panelArea.removeFromTop (54));
-        panelArea.removeFromTop (8);
+        padTitle.setBounds (titleRow.removeFromLeft (60));
+        padRole.setBounds (titleRow.removeFromLeft (130));
+        panelArea.removeFromTop (4);
+        padSample.setBounds (panelArea.removeFromTop (52));
+        panelArea.removeFromTop (4);
 
         auto knobRow = panelArea.removeFromTop (110);
         const int kw = knobRow.getWidth() / (int) knobs.size();
@@ -350,7 +657,7 @@ namespace drumchimp
             k.label.setBounds (cell.removeFromTop (16));
             k.slider.setBounds (cell);
         }
-        panelArea.removeFromTop (12);
+        panelArea.removeFromTop (8);
         auto bottomRow = panelArea.removeFromTop (26);
         choke.setBounds (bottomRow.removeFromLeft (90));
         bottomRow.removeFromLeft (16);

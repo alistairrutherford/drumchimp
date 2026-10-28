@@ -55,6 +55,13 @@ namespace drumchimp::params
             layout.add (std::move (group));
         }
 
+        // How alike Randomise's samples are: Matched (one family: 909, Acoustified, …) to Wild.
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "character", 1 }, "Character",
+            NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.25f,
+            AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+            {
+                return v < 0.005f ? String ("Matched") : v > 0.995f ? String ("Wild") : String (roundToInt (v * 100.0f)) + "% wild";
+            })));
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "source", 1 }, "Source", StringArray { "Generator", "MIDI In" }, 0));
         layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "notemap", 1 }, "Note map", StringArray { "GM", "Chromatic" }, 0));
         // Automatable only because Live leaves non-automatable VST3 parameters out of the LOM

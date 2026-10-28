@@ -186,6 +186,18 @@ namespace
         settings[0].audible = false;
         out = render (again, 2000, 128, { { 0, { 0, 0, 1.0f } } }, settings);
         check (near (out.left[fade + 10], 0.0f) && again.activeVoices() == 0, "muted: no new hits, and the sounding ones fade");
+
+        // The browser's preview slot plays at full level whatever the pads' settings.
+        DrumEngine preview;
+        preview.prepare (48000.0);
+        auto previewBank = std::make_unique<KitBank>();
+        previewBank->samples[(size_t) previewSlot] = impulses ({ { 0, 1.0f } }, 10);
+        preview.publish (std::move (previewBank));
+        PadSettingsArray quiet {};
+        for (auto& p : quiet)
+            p.gain = 0.0f;
+        out = render (preview, 64, 64, { { 3, { 0, previewSlot, 0.8f } } }, quiet);
+        check (near (out.left[3], 0.8f * 0.8f), "the preview slot plays (velocity 0.8), whatever the pads' settings");
     }
 
     void testBankSwap()

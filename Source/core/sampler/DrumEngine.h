@@ -3,7 +3,8 @@
 //
 //   SampleData   a decoded sample at its own rate (the voices resample: Tune needs that anyway,
 //                and a host rate change needs no reload). Immutable once made.
-//   KitBank      the sample of each pad. Made on the message thread and handed to the audio
+//   KitBank      the sample of each pad, and the browser's preview (slot `previewSlot`, played
+//                with default settings). Made on the message thread and handed to the audio
 //                thread whole.
 //   PadSettings  one pad's sound: level, pan, tune, decay, velocity sensitivity, choke group,
 //                and whether it's audible (mute and solo, resolved by the caller).
@@ -50,7 +51,7 @@ namespace drumchimp
 
     struct KitBank
     {
-        std::array<std::shared_ptr<const SampleData>, numPads> samples;
+        std::array<std::shared_ptr<const SampleData>, numPads + 1> samples;
     };
 
     struct PadSettings
@@ -65,6 +66,7 @@ namespace drumchimp
     };
 
     using PadSettingsArray = std::array<PadSettings, numPads>;
+    constexpr int previewSlot = numPads;
 
     class DrumEngine
     {
@@ -123,7 +125,7 @@ namespace drumchimp
             for (auto& v : voices)
                 if (v.sample != nullptr)
                 {
-                    const auto& s = settings[(size_t) v.pad];
+                    const auto& s = settingsFor (v.pad, settings);
                     if (! s.audible)
                         v.startFade (fadeLength);
                     aim (v, s, n);
@@ -190,15 +192,15 @@ namespace drumchimp
 
         void start (const Trigger& t, const PadSettingsArray& settings) noexcept
         {
-            if (t.pad < 0 || t.pad >= numPads || active == nullptr)
+            if (t.pad < 0 || t.pad > previewSlot || active == nullptr)
                 return;
-            const auto& s = settings[(size_t) t.pad];
+            const auto& s = settingsFor (t.pad, settings);
             const SampleData* sample = active->samples[(size_t) t.pad].get();
             if (! s.audible || sample == nullptr || sample->length() == 0)
                 return;
 
             for (auto& v : voices)
-                if (v.sample != nullptr && (v.pad == t.pad || (s.choke != 0 && settings[(size_t) v.pad].choke == s.choke)))
+                if (v.sample != nullptr && (v.pad == t.pad || (s.choke != 0 && settingsFor (v.pad, settings).choke == s.choke)))
                     v.startFade (fadeLength);
 
             Voice* free = nullptr;
@@ -218,6 +220,12 @@ namespace drumchimp
             v.gainL += v.deltaL;               // start at the target, with no glide
             v.gainR += v.deltaR;
             v.deltaL = v.deltaR = 0.0f;
+        }
+
+        static const PadSettings& settingsFor (int pad, const PadSettingsArray& settings) noexcept
+        {
+            static constexpr PadSettings preview {};          // constant-initialised: no guard on the audio thread
+            return pad < numPads ? settings[(size_t) pad] : preview;
         }
 
         static float at (const std::vector<float>& x, int i) noexcept

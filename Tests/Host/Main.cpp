@@ -13,6 +13,10 @@
 //   6. Editor    opens and closes with a kit loading
 //   7. Library   the background scan finishes, is shared by every instance, and sorts the default
 //                kit's samples into their roles (skipped without a Core Library)
+//   8. Kits      on the real library: Randomise fills every pad with its role, undo and redo, a
+//                lock holds, a pad's dice, a pad's role, the browser's preview, a kit preset
+//                round trip, roles and locks with the set, and a missing sample found again
+//   6 runs last: the editor with the library and a kit loaded, written to Tests/build/editor.png
 //
 //   DrumChimpHost
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -366,15 +370,125 @@ namespace
         check (waitFor ([&] { return p.library->version() != before; }, 20000), "a rescan finishes (" + juce::String (juce::roundToInt (p.library->status().milliseconds)) + " ms, from the cache)");
     }
 
-    void testEditor (const Files& f)
+    bool kitMatchesRoles (const DrumChimpProcessor& p, const LibraryIndex& index)
+    {
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            const auto* info = index.find (p.padSource (pad).path.toStdString());
+            if (info == nullptr || info->classification.role != libraryRole (p.padRole (pad)))
+                return false;
+        }
+        return true;
+    }
+
+    void testKits (const Files& f)
+    {
+        std::cout << "8. Kits\n";
+        DrumChimpProcessor p;
+        prepare (p);
+        waitFor ([&] { return p.library->index() != nullptr; }, 20000);
+        const auto index = p.library->index();
+        if (index == nullptr || index->drums() == 0)
+        {
+            std::cout << "  SKIP  no Ableton library on this Mac\n";
+            return;
+        }
+        waitFor ([&] { return p.padSource (0).status != Status::empty && allSettled (p); });
+        const auto first = p.kitPaths();
+        check (! p.canUndo(), "the default kit isn't an undo step");
+
+        p.randomiseKit();
+        waitFor ([&] { return allSettled (p); });
+        const auto second = p.kitPaths();
+        int changed = 0;
+        for (int pad = 0; pad < numPads; ++pad)
+            changed += second[(size_t) pad] != first[(size_t) pad] ? 1 : 0;
+        check (changed == numPads, "Randomise changes all eight pads (" + juce::String (changed) + ")");
+        check (kitMatchesRoles (p, *index), "each with a sample of its role (family: " + p.lastFamily() + ")");
+        check (p.canUndo(), "and can be undone");
+        p.undoKit();
+        check (p.kitPaths() == first && p.canRedo(), "Undo brings back the kit before");
+        p.redoKit();
+        check (p.kitPaths() == second, "Redo the one after");
+
+        p.setLocked (0, true);
+        p.setLocked (3, true);
+        p.randomiseKit();
+        const auto third = p.kitPaths();
+        check (third[0] == second[0] && third[3] == second[3] && third[1] != second[1], "locked pads stay; the rest change");
+
+        p.randomisePad (5);
+        const auto fourth = p.kitPaths();
+        bool onlyFive = fourth[5] != third[5];
+        for (int pad = 0; pad < numPads; ++pad)
+            onlyFive = onlyFive && (pad == 5 || fourth[(size_t) pad] == third[(size_t) pad]);
+        check (onlyFive, "a pad's dice changes only that pad");
+
+        p.setPadRole (6, PadRole::perc);
+        p.randomisePad (6);
+        waitFor ([&] { return allSettled (p); });
+        const auto* perc = index->find (p.padSource (6).path.toStdString());
+        check (perc != nullptr && perc->classification.role == Role::perc, "a pad turned to Perc gets a perc on its dice");
+
+        // The browser's preview plays without touching the pads.
+        Block b;
+        setParam (p, "source", 1.0f);
+        const auto before = p.kitPaths();
+        p.previewSample (f.click);
+        float heard = 0.0f;
+        for (int i = 0; i < 50 && heard < 0.5f; ++i)
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+            run (p, b);
+            heard = std::max (heard, b.audio.getMagnitude (0, 512));
+        }
+        check (heard > 0.5f && p.kitPaths() == before, "a preview plays (" + juce::String (heard, 2) + ") and changes no pad");
+
+        // Kit presets.
+        setParam (p, "p2_tune", 3.0f);
+        juce::String error;
+        const juce::String name = "DrumChimpHost test kit";
+        check (p.saveKitPreset (name, error), "a kit saves as a preset");
+        const auto presetFile = DrumChimpProcessor::kitsFolder().getChildFile (name + ".json");
+        const auto saved = p.kitPaths();
+        p.randomiseKit();
+        p.setPadRole (6, PadRole::highTom);
+        setParam (p, "p2_tune", 0.0f);
+        check (p.loadKitPreset (presetFile, error), "and loads back");
+        check (p.kitPaths() == saved && p.padRole (6) == PadRole::perc && std::abs (p.state.getRawParameterValue ("p2_tune")->load() - 3.0f) < 0.01f,
+               "samples, roles and sounds as saved");
+        const auto other = presetFile.getSiblingFile ("not a kit.json");
+        other.replaceWithText ("{}");
+        check (! p.loadKitPreset (other, error) && error.contains ("isn't a DrumChimp kit"), "a JSON that isn't a kit is refused");
+        presetFile.deleteFile();
+        other.deleteFile();
+
+        // Roles and locks go with the set; a sample moved since is found again in the library.
+        juce::MemoryBlock state;
+        p.getStateInformation (state);
+        auto xml = juce::AudioProcessor::getXmlFromBinary (state.getData(), (int) state.getSize());
+        const auto kick = p.padSource (0);
+        for (auto* pad : xml->getChildByName ("Kit")->getChildIterator())
+            if (pad->getIntAttribute ("index") == 0)
+                pad->setAttribute ("path", "/Volumes/Old Drive/Somewhere/" + juce::File (kick.path).getFileName());
+        juce::MemoryBlock moved;
+        juce::AudioProcessor::copyXmlToBinary (*xml, moved);
+        DrumChimpProcessor q;
+        q.setStateInformation (moved.getData(), (int) moved.getSize());
+        check (q.padRole (6) == PadRole::perc && q.isLocked (0) && q.isLocked (3) && ! q.isLocked (1), "roles and locks restored");
+        check (waitFor ([&] { return q.padSource (0).status == Status::loaded; }), "the moved kick loads");
+        const auto found = q.padSource (0);
+        check (found.path == kick.path && found.message.startsWith ("Found again"), "from where the library has it, saying so");
+    }
+
+    void testEditor (const Files&)
     {
         std::cout << "6. Editor\n";
         DrumChimpProcessor p;
-        p.loadSample (0, f.click);
+        waitFor ([&] { return p.library->index() != nullptr && p.padSource (0).status != Status::empty && allSettled (p); }, 20000);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         check (editor != nullptr && editor->getWidth() > 0, "opens");
-        waitFor ([&] { return allSettled (p); });
-        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
 
         // A picture for a look (not compared): Tests/build/editor.png.
         const auto png = juce::File (__FILE__).getParentDirectory().getSiblingFile ("build").getChildFile ("editor.png");
@@ -400,8 +514,9 @@ int main()
         testState (files);
         testRealtime (files);
         testDefaultKit();
-        testEditor (files);
         testLibrary();
+        testKits (files);
+        testEditor (files);
     }
     std::cout << (failures == 0 ? "\nDrumChimpHost: all passed\n" : "\n*** DrumChimpHost: " + std::to_string (failures) + " failure(s)\n");
     return failures == 0 ? 0 : 1;

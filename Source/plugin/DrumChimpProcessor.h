@@ -9,12 +9,19 @@
 //              to the audio thread as a whole bank (DrumEngine::publish). A new instance loads the
 //              Core Library 909 kit (DefaultKit.h) unless the host restores a state first.
 //   Library    the sample library (Library.h), scanned in the background, shared by every instance
+//   Kits       each pad has a role and a lock. Randomise and a pad's dice build kits from the
+//              library (core/kit/KitBuilder.h, Character Matched → Wild); every kit change can be
+//              undone (the last 20, for the session). Kit presets (samples, roles and sound
+//              settings) are JSON files in ~/Library/Application Support/DrumChimp/Kits. A
+//              missing sample is looked for in the library by name and size, and loaded from
+//              where it is now. previewSample() plays a file from the browser without a pad.
 //   State      the parameters, plus each pad's sample path and file size. A sample that is gone
 //              when the set opens shows as missing (Phase 3 will look for it by name).
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../core/engine/TestPattern.h"
+#include "../core/kit/KitBuilder.h"
 #include "../core/sampler/DrumEngine.h"
 #include "Library.h"
 #include "Parameters.h"
@@ -66,11 +73,34 @@ namespace drumchimp
             juce::String message;                 // why it's missing or failed
         };
 
-        void loadSample (int pad, const juce::File& file, juce::int64 savedSize = 0);
-        void clearPad (int pad);
+        // `record`: the change can be undone (Randomise, a drop, Load…, Clear).
+        void loadSample (int pad, const juce::File& file, juce::int64 savedSize = 0, bool record = true);
+        void clearPad (int pad, bool record = true);
         void loadDefaultKit();
         PadSource padSource (int pad) const;
         juce::uint32 kitVersion() const noexcept { return kitChanges.load(); }   // changes with every pad change
+
+        KitPaths kitPaths() const;
+        void applyKit (const KitPaths& paths, bool record);
+        void randomiseKit();
+        void randomisePad (int pad);
+        juce::String lastFamily() const { return family; }   // the family Randomise last chose, or ""
+        bool canUndo() const { return history.canUndo(); }
+        bool canRedo() const { return history.canRedo(); }
+        void undoKit();
+        void redoKit();
+
+        PadRole padRole (int pad) const { return roles[(size_t) juce::jlimit (0, numPads - 1, pad)]; }
+        void setPadRole (int pad, PadRole role);
+        bool isLocked (int pad) const { return locked[(size_t) juce::jlimit (0, numPads - 1, pad)]; }
+        void setLocked (int pad, bool shouldLock);
+
+        void previewSample (const juce::File& file);
+
+        static juce::File kitsFolder();
+        juce::Array<juce::File> kitPresets() const;
+        bool saveKitPreset (const juce::String& name, juce::String& error);
+        bool loadKitPreset (const juce::File& file, juce::String& error);
 
         void audition (int pad) noexcept { pendingAuditions.fetch_or (1u << pad); }
         juce::uint32 takeHits() noexcept { return hits.exchange (0); }   // pads played since the last call
@@ -91,7 +121,9 @@ namespace drumchimp
         static BusesProperties makeBuses();
         void timerCallback() override;
         void takeLoadedSamples();
+        void relocateMissing();
         void publishKit();
+        KitRequest kitRequest() const;
         void flushNoteOffs (juce::MidiBuffer& midi, int sample, NoteMap map) noexcept;
 
         const params::Reader reader;
@@ -100,10 +132,15 @@ namespace drumchimp
 
         // Message thread (getStateInformation may come from another thread: `kitLock`).
         juce::CriticalSection kitLock;
-        std::array<std::shared_ptr<const SampleData>, numPads> kit;
+        std::array<std::shared_ptr<const SampleData>, numPads + 1> kit;   // + the preview
         std::array<PadSource, numPads> sources;
-        std::array<juce::uint32, numPads> generations {};
-        bool stateRestored = false, defaultKitTried = false;
+        std::array<juce::uint32, numPads + 1> generations {};
+        std::array<PadRole, numPads> roles = defaultPadRoles;
+        std::array<bool, numPads> locked {};
+        KitHistory history;
+        juce::String family;
+        bool stateRestored = false, defaultKitTried = false, lookForMissing = false;
+        juce::uint32 libraryVersionSeen = 0;
         std::atomic<juce::uint32> kitChanges { 0 };
 
         // Audio thread.

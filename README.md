@@ -4,12 +4,15 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 8-pad k
 in your Ableton library, randomises new kits, and generates drum patterns in different styles that
 become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 
-**Status:** Phase 2 is done (PLAN.md §10). Eight sampler pads with Level, Pan, Tune, Decay,
-Velocity, Choke, Mute and Solo; drop a sample from Live's browser or Finder on a pad, or use
-Load…. A new instance starts with the Core Library's 909 kit. In the background, DrumChimp finds
-your Ableton library (Core Library, packs, User Library, Places) and sorts every one-shot into a
-drum role; the status line shows the count. The pattern generator is still the Phase 0 test
-pattern, and there's no browser or Randomise yet (Phase 3).
+**Status:** Phase 3 is done (PLAN.md §10).
+- **Kits:** **Randomise kit** builds an 8-pad kit from your Ableton library: one family (808, 909,
+  Acoustified, …) at *Matched*, anything of each role at *Wild*. Lock pads to keep them, roll one
+  pad with its dice, and Undo/Redo the last 20 kits. Save and load kits from the *Kits* menu.
+- **Browser:** filtered to the selected pad's role, and searchable. Click a sample to hear it;
+  double-click it, or drag it onto a pad, to load it. Drops from Live's browser and Finder work too.
+- **Pads:** each has a role, plus Level, Pan, Tune, Decay, Velocity, Choke, Mute and Solo.
+- **Saved sets:** a sample that moved since the set was saved is found again in the library.
+- **Not yet:** the pattern generator is still the Phase 0 test pattern (Phase 4).
 
 ## Install
 
@@ -28,7 +31,7 @@ Restart Live afterwards: Live keeps a plug-in's old binary loaded until it quits
 Tests/run_tests.sh            # core tests (no JUCE)
 Tests/run_host_tests.sh       # processor tests (JUCE console app): loading, timing, state, no allocation
 Tests/run_validation.sh       # pluginval strictness 10 on the installed VST3
-Tools/classify.sh             # scan and classify the Ableton library: timings, counts (--csv FILE: every sample)
+Tools/classify.sh             # scan and classify the Ableton library: timings, counts (--csv FILE: every sample, --kits N: example kits)
 ```
 
 ## Phase 0 spikes

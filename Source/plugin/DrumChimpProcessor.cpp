@@ -145,10 +145,11 @@ namespace drumchimp
     }
 
     //==========================================================================
-    void DrumChimpProcessor::loadSample (int pad, const juce::File& file, juce::int64 savedSize)
+    void DrumChimpProcessor::loadSample (int pad, const juce::File& file, juce::int64 savedSize, bool record)
     {
         if (pad < 0 || pad >= numPads)
             return;
+        const auto before = kitPaths();
         // While a sample loads the pad keeps playing its last one; a missing file empties it.
         defaultKitTried = true;           // a kit chosen before the first timer tick wins
         bool missing;
@@ -157,7 +158,7 @@ namespace drumchimp
             auto& s = sources[(size_t) pad];
             missing = ! file.existsAsFile();
             s.path = file.getFullPathName();
-            s.fileSize = missing ? savedSize : file.getSize();   // kept for finding it again (Phase 3)
+            s.fileSize = missing ? savedSize : file.getSize();   // kept for finding it again
             s.status = missing ? PadSource::Status::missing : PadSource::Status::loading;
             s.message = missing ? "Missing: " + s.path : juce::String();
             ++generations[(size_t) pad];
@@ -167,14 +168,20 @@ namespace drumchimp
                 loader.request (pad, generations[(size_t) pad], s.path);
         }
         if (missing)
+        {
             publishKit();
+            lookForMissing = true;
+        }
+        if (record)
+            history.record (before, kitPaths());
         ++kitChanges;
     }
 
-    void DrumChimpProcessor::clearPad (int pad)
+    void DrumChimpProcessor::clearPad (int pad, bool record)
     {
         if (pad < 0 || pad >= numPads)
             return;
+        const auto before = kitPaths();
         defaultKitTried = true;
         {
             const juce::ScopedLock sl (kitLock);
@@ -183,6 +190,8 @@ namespace drumchimp
             ++generations[(size_t) pad];
         }
         publishKit();
+        if (record)
+            history.record (before, kitPaths());
         ++kitChanges;
     }
 
@@ -194,7 +203,7 @@ namespace drumchimp
             if (root.kind == LibraryRoot::Kind::coreLibrary)
             {
                 for (int pad = 0; pad < numPads; ++pad)
-                    loadSample (pad, juce::File (root.path).getChildFile (defaultKitPaths[(size_t) pad]));
+                    loadSample (pad, juce::File (root.path).getChildFile (defaultKitPaths[(size_t) pad]), 0, false);
                 return;
             }
     }
@@ -203,6 +212,101 @@ namespace drumchimp
     {
         const juce::ScopedLock sl (kitLock);
         return sources[(size_t) juce::jlimit (0, numPads - 1, pad)];
+    }
+
+    KitPaths DrumChimpProcessor::kitPaths() const
+    {
+        KitPaths paths;
+        const juce::ScopedLock sl (kitLock);
+        for (int pad = 0; pad < numPads; ++pad)
+            paths[(size_t) pad] = sources[(size_t) pad].path.toStdString();
+        return paths;
+    }
+
+    void DrumChimpProcessor::applyKit (const KitPaths& paths, bool record)
+    {
+        const auto before = kitPaths();
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            if (paths[(size_t) pad] == before[(size_t) pad])
+                continue;
+            if (paths[(size_t) pad].empty())
+                clearPad (pad, false);
+            else
+                loadSample (pad, juce::File (paths[(size_t) pad]), 0, false);
+        }
+        if (record)
+            history.record (before, kitPaths());
+    }
+
+    KitRequest DrumChimpProcessor::kitRequest() const
+    {
+        KitRequest request;
+        request.roles = roles;
+        request.locked = locked;
+        request.current = kitPaths();
+        request.character = state.getRawParameterValue ("character")->load();
+        request.seed = (uint64_t) juce::Random::getSystemRandom().nextInt64();
+        return request;
+    }
+
+    void DrumChimpProcessor::randomiseKit()
+    {
+        const auto index = library->index();
+        if (index == nullptr)
+            return;                       // the first scan hasn't finished
+        const auto result = buildKit (*index, kitRequest());
+        family = result.family.rfind ("pack:", 0) == 0 ? juce::String (result.family.substr (5)) : juce::String (result.family);
+        applyKit (result.paths, true);
+    }
+
+    void DrumChimpProcessor::randomisePad (int pad)
+    {
+        const auto index = library->index();
+        if (index == nullptr || pad < 0 || pad >= numPads)
+            return;
+        auto request = kitRequest();
+        request.locked.fill (true);
+        request.locked[(size_t) pad] = false;
+        applyKit (buildKit (*index, request).paths, true);
+    }
+
+    void DrumChimpProcessor::undoKit()
+    {
+        if (history.canUndo())
+            applyKit (history.undo(), false);
+    }
+
+    void DrumChimpProcessor::redoKit()
+    {
+        if (history.canRedo())
+            applyKit (history.redo(), false);
+    }
+
+    void DrumChimpProcessor::setPadRole (int pad, PadRole role)
+    {
+        if (pad >= 0 && pad < numPads && roles[(size_t) pad] != role)
+        {
+            roles[(size_t) pad] = role;
+            updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+            ++kitChanges;
+        }
+    }
+
+    void DrumChimpProcessor::setLocked (int pad, bool shouldLock)
+    {
+        if (pad >= 0 && pad < numPads && locked[(size_t) pad] != shouldLock)
+        {
+            locked[(size_t) pad] = shouldLock;
+            updateHostDisplay (ChangeDetails().withNonParameterStateChanged (true));
+            ++kitChanges;
+        }
+    }
+
+    void DrumChimpProcessor::previewSample (const juce::File& file)
+    {
+        const juce::ScopedLock sl (kitLock);
+        loader.request (previewSlot, ++generations[(size_t) previewSlot], file.getFullPathName());
     }
 
     void DrumChimpProcessor::publishKit()
@@ -220,19 +324,27 @@ namespace drumchimp
         auto results = loader.takeResults();
         if (results.empty())
             return;
-        bool changed = false;
+        bool changed = false, playPreview = false;
         {
             const juce::ScopedLock sl (kitLock);
             for (auto& r : results)
             {
                 if (r.generation != generations[(size_t) r.pad])
                     continue;                     // a later request replaced it
+                if (r.pad == previewSlot)
+                {
+                    kit[(size_t) previewSlot] = std::move (r.sample);
+                    playPreview = kit[(size_t) previewSlot] != nullptr;
+                    changed = true;
+                    continue;
+                }
                 auto& s = sources[(size_t) r.pad];
                 if (r.sample != nullptr)
                 {
                     kit[(size_t) r.pad] = std::move (r.sample);
                     s.status = PadSource::Status::loaded;
-                    s.message = {};
+                    if (! s.message.startsWith ("Found again"))
+                        s.message = {};
                 }
                 else
                 {
@@ -248,6 +360,30 @@ namespace drumchimp
             publishKit();
             ++kitChanges;
         }
+        if (playPreview)
+            audition (previewSlot);           // the bank is published first, so the preview is in it
+    }
+
+    // A sample saved in a set but gone from its place (a pack moved, Live renamed): if the library
+    // has it, load it from there. Tried when a pad goes missing and when a scan finishes.
+    void DrumChimpProcessor::relocateMissing()
+    {
+        const auto index = library->index();
+        if (index == nullptr)
+            return;
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            const auto s = padSource (pad);
+            if (s.status != PadSource::Status::missing)
+                continue;
+            if (const auto* found = relocate (*index, s.path.toStdString(), s.fileSize))
+            {
+                const juce::String was = s.path;
+                loadSample (pad, juce::File (found->path), 0, false);
+                const juce::ScopedLock sl (kitLock);
+                sources[(size_t) pad].message = "Found again: it was at " + was;
+            }
+        }
     }
 
     void DrumChimpProcessor::timerCallback()
@@ -255,7 +391,94 @@ namespace drumchimp
         if (! stateRestored && ! defaultKitTried)
             loadDefaultKit();
         takeLoadedSamples();
+        if (const auto v = library->version(); v != libraryVersionSeen || lookForMissing)
+        {
+            libraryVersionSeen = v;
+            lookForMissing = false;
+            relocateMissing();
+        }
         engine.collectGarbage();
+    }
+
+    //==========================================================================
+    juce::File DrumChimpProcessor::kitsFolder()
+    {
+        return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("Application Support/DrumChimp/Kits");
+    }
+
+    juce::Array<juce::File> DrumChimpProcessor::kitPresets() const
+    {
+        auto files = kitsFolder().findChildFiles (juce::File::findFiles, false, "*.json");
+        files.sort();
+        return files;
+    }
+
+    bool DrumChimpProcessor::saveKitPreset (const juce::String& name, juce::String& error)
+    {
+        const auto clean = juce::File::createLegalFileName (name.trim());
+        if (clean.isEmpty())
+        {
+            error = "The kit needs a name";
+            return false;
+        }
+        juce::Array<juce::var> pads;
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            auto* p = new juce::DynamicObject();
+            const auto s = padSource (pad);
+            p->setProperty ("role", padRoleId (roles[(size_t) pad]));
+            p->setProperty ("path", s.path);
+            p->setProperty ("size", s.fileSize);
+            for (const char* setting : { "level", "pan", "tune", "decay", "vel", "choke" })
+                p->setProperty (setting, state.getRawParameterValue (params::padID (pad, setting))->load());
+            pads.add (juce::var (p));
+        }
+        auto* root = new juce::DynamicObject();
+        root->setProperty ("drumchimpKit", 1);
+        root->setProperty ("name", name.trim());
+        root->setProperty ("pads", pads);
+
+        const auto file = kitsFolder().getChildFile (clean + ".json");
+        if (! kitsFolder().createDirectory() || ! file.replaceWithText (juce::JSON::toString (juce::var (root))))
+        {
+            error = "Couldn't write " + file.getFullPathName();
+            return false;
+        }
+        return true;
+    }
+
+    bool DrumChimpProcessor::loadKitPreset (const juce::File& file, juce::String& error)
+    {
+        const auto json = juce::JSON::parse (file.loadFileAsString());
+        const auto* pads = json["pads"].getArray();
+        if ((int) json["drumchimpKit"] != 1 || pads == nullptr || pads->size() != numPads)
+        {
+            error = file.getFileName() + " isn't a DrumChimp kit";
+            return false;
+        }
+        KitPaths paths;
+        for (int pad = 0; pad < numPads; ++pad)
+        {
+            const auto& p = pads->getReference (pad);
+            roles[(size_t) pad] = padRoleFromId (p["role"].toString().toStdString(), defaultPadRoles[(size_t) pad]);
+            for (const char* setting : { "level", "pan", "tune", "decay", "vel", "choke" })
+                if (auto* param = state.getParameter (params::padID (pad, setting)); param != nullptr && p.hasProperty (setting))
+                    param->setValueNotifyingHost (param->convertTo0to1 ((float) (double) p[setting]));
+            paths[(size_t) pad] = p["path"].toString().toStdString();
+        }
+        const auto before = kitPaths();
+        applyKit (paths, false);
+        // Saved sizes, so a sample gone missing can be found again.
+        {
+            const juce::ScopedLock sl (kitLock);
+            for (int pad = 0; pad < numPads; ++pad)
+                if (sources[(size_t) pad].status == PadSource::Status::missing)
+                    sources[(size_t) pad].fileSize = (juce::int64) pads->getReference (pad)["size"];
+        }
+        history.record (before, kitPaths());
+        family = {};
+        ++kitChanges;
+        return true;
     }
 
     //==========================================================================
@@ -285,8 +508,12 @@ namespace drumchimp
         {
             const juce::ScopedLock sl (kitLock);
             for (int pad = 0; pad < numPads; ++pad)
-                if (const auto& s = sources[(size_t) pad]; s.path.isNotEmpty())
-                    kitTree.appendChild (juce::ValueTree ("Pad", { { "index", pad }, { "path", s.path }, { "size", s.fileSize } }), nullptr);
+            {
+                const auto& s = sources[(size_t) pad];
+                kitTree.appendChild (juce::ValueTree ("Pad", { { "index", pad }, { "path", s.path }, { "size", s.fileSize },
+                                                               { "role", padRoleId (roles[(size_t) pad]) }, { "locked", locked[(size_t) pad] } }),
+                                     nullptr);
+            }
         }
         tree.appendChild (kitTree, nullptr);
         if (const auto xml = tree.createXml())
@@ -306,19 +533,25 @@ namespace drumchimp
         stateRestored = true;
         std::array<juce::String, numPads> paths;
         std::array<juce::int64, numPads> sizes {};
+        roles = defaultPadRoles;
+        locked.fill (false);
         for (const auto& pad : kitTree)
             if (const int index = pad.getProperty ("index", -1); index >= 0 && index < numPads)
             {
                 paths[(size_t) index] = pad.getProperty ("path").toString();
                 sizes[(size_t) index] = (juce::int64) pad.getProperty ("size", 0);
+                roles[(size_t) index] = padRoleFromId (pad.getProperty ("role").toString().toStdString(), defaultPadRoles[(size_t) index]);
+                locked[(size_t) index] = (bool) pad.getProperty ("locked", false);
             }
         for (int pad = 0; pad < numPads; ++pad)
         {
             if (paths[(size_t) pad].isEmpty())
-                clearPad (pad);
+                clearPad (pad, false);
             else
-                loadSample (pad, juce::File (paths[(size_t) pad]), sizes[(size_t) pad]);
+                loadSample (pad, juce::File (paths[(size_t) pad]), sizes[(size_t) pad], false);
         }
+        history.clear();
+        family = {};
     }
 
     juce::AudioProcessorEditor* DrumChimpProcessor::createEditor()

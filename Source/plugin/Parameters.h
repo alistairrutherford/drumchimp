@@ -1,9 +1,10 @@
-// The plug-in's parameters (PLAN.md §3.1): eight per pad, then three global ones.
+// The plug-in's parameters (PLAN.md §3.1): eight per pad, then four global ones.
 //
 //   pN_level   dB, −60 (off) … +6           pN_decay   10 ms … 10 s, the top is "Full"
 //   pN_pan     L100 … C … R100              pN_vel     velocity sensitivity, 0 … 100%
 //   pN_tune    −24 … +24 semitones          pN_choke   None, A, B, C, D (hats share A)
 //   pN_mute, pN_solo
+//   character  Randomise: Matched (one family) … Wild
 //   source     Generator (the test pattern plays and goes to MIDI out) or MIDI In
 //   notemap    GM or Chromatic
 //   instance   Instance ID, random per instance (PLAN.md §3.6, route C)
