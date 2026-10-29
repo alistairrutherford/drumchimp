@@ -36,7 +36,8 @@ namespace drumchimp
     constexpr std::array<const char*, numPadRoles> padRoleIds { "kick", "snare", "clap", "rim", "closedHat", "openHat", "lowTom", "midTom", "highTom", "crash", "ride", "perc" };
     constexpr std::array<const char*, numPadRoles> padRoleNames { "Kick", "Snare", "Clap", "Rim", "Closed hat", "Open hat", "Low tom", "Mid tom", "High tom", "Crash", "Ride", "Perc" };
     constexpr std::array<PadRole, numPads> defaultPadRoles {
-        PadRole::kick, PadRole::snare, PadRole::clap, PadRole::closedHat, PadRole::openHat, PadRole::lowTom, PadRole::highTom, PadRole::crash };
+        PadRole::kick, PadRole::snare, PadRole::clap, PadRole::closedHat, PadRole::openHat, PadRole::lowTom, PadRole::highTom, PadRole::crash,
+        PadRole::rim, PadRole::midTom, PadRole::ride, PadRole::perc };
 
     inline const char* padRoleName (PadRole r) { return padRoleNames[(size_t) r]; }
     inline const char* padRoleId (PadRole r) { return padRoleIds[(size_t) r]; }

@@ -188,10 +188,10 @@ namespace
                 for (const int s : { 3, 6, 11, 14 })
                     dembow = dembow && dem.lanes[1][(size_t) (bar * 16 + s)].velocity > 0;
                 for (const int s : { 0, 3, 6, 9 })
-                    jazz = jazz && j.lanes[3][(size_t) (bar * 12 + s)].velocity > 0;     // the ride, on the hats with no ride pad
+                    jazz = jazz && j.lanes[10][(size_t) (bar * 12 + s)].velocity > 0;    // the ride, on the Ride pad
                 const std::vector<int> clave = bar % 2 == 0 ? std::vector<int> { 0, 3, 6, 10, 13 } : std::vector<int> { 2, 5, 10 };
                 for (const int s : clave)
-                    bossa = bossa && b.lanes[1][(size_t) (bar * 16 + s)].velocity > 0;   // the rim, on the snare with no rim pad
+                    bossa = bossa && b.lanes[8][(size_t) (bar * 16 + s)].velocity > 0;   // the rim, on the Rim pad
             }
             jazz = jazz && j.stepsPerBar == 12 && j.steps() == 48;
         }
@@ -348,11 +348,15 @@ namespace
 
         // Fallbacks: the default kit has no rim; Reggae's rim plays on the snare.
         const auto reggae = generatePattern (named (all, "Reggae"), g, defaultPadRoles);
-        check (reggae.lanes[1][8].velocity > 0, "a rim lane with no rim pad plays the snare");
-        auto roles = defaultPadRoles;
-        roles[2] = PadRole::rim;
-        const auto withRim = generatePattern (named (all, "Reggae"), g, roles);
-        check (withRim.lanes[2][8].velocity > 0 && withRim.lanes[1][8].velocity == 0, "with a Rim pad, on the rim");
+        check (reggae.lanes[8][8].velocity > 0 && reggae.lanes[1][8].velocity == 0, "a rim lane plays the Rim pad (pad 9)");
+        auto noRim = defaultPadRoles;
+        noRim[8] = PadRole::perc;
+        const auto withoutRim = generatePattern (named (all, "Reggae"), g, noRim);
+        check (withoutRim.lanes[1][8].velocity > 0, "with no Rim pad, the snare plays it");
+        auto noRide = defaultPadRoles;
+        noRide[10] = PadRole::perc;
+        const auto jazzNoRide = generatePattern (named (all, "Jazz"), g, noRide);
+        check (jazzNoRide.lanes[3][0].velocity > 0, "with no Ride pad, the closed hats play the ride");
 
         GeneratorSettings eight = g;
         eight.bars = 8;

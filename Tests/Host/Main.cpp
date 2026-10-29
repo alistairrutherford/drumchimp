@@ -535,8 +535,9 @@ namespace
         check (waitFor ([&] { return allSettled (p); }), "the default kit loads");
         bool all909 = true;
         for (int pad = 0; pad < numPads; ++pad)
-            all909 = all909 && p.padSource (pad).status == Status::loaded && p.padSource (pad).path.contains ("909");
-        check (all909, "eight 909 samples from the Core Library");
+            all909 = all909 && p.padSource (pad).status == Status::loaded
+                     && p.padSource (pad).path.contains (pad == numPads - 1 ? "Tamb 707" : "909");
+        check (all909, "twelve samples from the Core Library: 909s, and a 707 tambourine on Perc");
     }
 
     void testLibrary()
@@ -554,7 +555,8 @@ namespace
         check (index->drums() > 0 && index->drums() < index->size(), juce::String ((int) index->drums()) + " drums among " + juce::String ((int) index->size()) + " samples");
         check (Library::cacheFile().existsAsFile(), "the cache is written");
         waitFor ([&] { return p.padSource (0).status == Status::loaded; }, 5000);
-        const std::array<Role, numPads> expected { Role::kick, Role::snare, Role::clap, Role::closedHat, Role::openHat, Role::tom, Role::tom, Role::crash };
+        const std::array<Role, numPads> expected { Role::kick, Role::snare, Role::clap, Role::closedHat, Role::openHat, Role::tom, Role::tom, Role::crash,
+                                                   Role::rim, Role::tom, Role::ride, Role::perc };
         bool sorted = true;
         for (int pad = 0; pad < numPads; ++pad)
         {
@@ -600,7 +602,7 @@ namespace
         int changed = 0;
         for (int pad = 0; pad < numPads; ++pad)
             changed += second[(size_t) pad] != first[(size_t) pad] ? 1 : 0;
-        check (changed == numPads, "Randomise changes all eight pads (" + juce::String (changed) + ")");
+        check (changed == numPads, "Randomise changes all " + juce::String (numPads) + " pads (" + juce::String (changed) + ")");
         check (kitMatchesRoles (p, *index), "each with a sample of its role (family: " + p.lastFamily() + ")");
         bool allLoad = true;
         for (int round = 0; round < 10 && allLoad; ++round)
@@ -910,8 +912,8 @@ namespace
         p.uiScale = 1.25f;
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-            check (editor->getWidth() == 1200 && editor->getHeight() == 950, "opens at its saved size (125%: 1200 × 950)");
-            editor->setSize (768, 608);
+            check (editor->getWidth() == 1200 && editor->getHeight() == 1025, "opens at its saved size (125%: 1200 × 1025)");
+            editor->setSize (768, 656);
             check (std::abs (p.uiScale - 0.8f) < 0.001f, "a resize is kept (80%)");
         }
         juce::MemoryBlock state;
@@ -999,7 +1001,7 @@ namespace
         juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
 
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (960, 760);
+        editor->setSize (960, 820);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
         auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
         for (auto* child : editor->getChildren())     // the editor's one child is its content, at scale 1 here

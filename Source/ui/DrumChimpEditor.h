@@ -1,4 +1,4 @@
-// The editor (PLAN.md §5), Phase 6. Everything is laid out at 960 × 760 in `content`, which is
+// The editor (PLAN.md §5), Phase 6. Everything is laid out at 960 × 820 in `content`, which is
 // scaled to the window: drag the corner to resize (70%–150%, kept with the set).
 //
 //   Header      Source (Generator / MIDI In), Note map (GM / Chromatic), and the drag handle:
@@ -6,7 +6,7 @@
 //   Kit bar     Randomise kit, Undo, Redo, where Randomise takes kits from (your library, or
 //               Ableton's Drum Rack kits), Character (Matched … Wild), the family or kit chosen,
 //               and Kits (save the kit as a preset, load one, or load an Ableton kit by name)
-//   Pads        eight pads with their role and sample, a lock and a dice. Click to select and play
+//   Pads        twelve pads, three rows of four, with their role and sample, a lock and a dice. Click to select and play
 //               one; drop a sample on one (from Live's browser, Finder or DrumChimp's browser) to
 //               load it. A pad lights when it plays.
 //   Browser     the library, filtered by role (the selected pad's, by default) and by text. Click
@@ -199,7 +199,8 @@ namespace drumchimp
             std::function<void (juce::Graphics&)> onPaint;
             void paint (juce::Graphics& g) override { if (onPaint) onPaint (g); }
         };
-        static constexpr int baseWidth = 960, baseHeight = 760;
+        static constexpr int baseWidth = 960, baseHeight = 820;
+        static constexpr int padsPerRow = 4;
 
         void timerCallback() override;
         void layout();

@@ -104,9 +104,9 @@ the app.
 
 ### 3.1 Pads
 
-Eight pads, each with a **role**, a **sample** and its own sound settings. The default roles
-follow a standard kit, with General MIDI note numbers, so the generated MIDI also plays an
-Ableton Drum Rack correctly:
+Twelve pads in three rows of four (eight until 2026-10-29), each with a **role**, a **sample**
+and its own sound settings. The default roles follow a standard kit, with General MIDI note
+numbers, so the generated MIDI also plays an Ableton Drum Rack correctly:
 
 | Pad | Default role | Note | Choke group |
 |---|---|---|---|
@@ -117,11 +117,16 @@ Ableton Drum Rack correctly:
 | 5 | Open hi-hat | 46 (A#1) | Hats (a closed hat cuts it off) |
 | 6 | Low tom | 45 (A1) | – |
 | 7 | High tom | 50 (D2) | – |
-| 8 | Crash or ride | 49 (C#2) | – |
+| 8 | Crash | 49 (C#2) | – |
+| 9 | Rim | 37 (C#1) | – |
+| 10 | Mid tom | 47 (B1) | – |
+| 11 | Ride | 51 (D#2) | – |
+| 12 | Perc (a tambourine by default) | 54 (F#2) | – |
 
 - **Role per pad** can be changed (for example, pad 7 → Shaker or Perc). Changing a role changes
   what Randomise picks for that pad and which pattern lane it plays.
-- **Note map:** *GM* (above, the default) or *Chromatic* (36–43, like a Drum Rack's bottom row).
+- **Note map:** *GM* (above, the default) or *Chromatic* (36–47, like a Drum Rack's bottom three
+  rows).
 - **Per-pad settings:** Level, Pan, Tune (±24 semitones), Decay, Velocity sensitivity, Choke
   group, Mute, Solo, and **Lock** (Randomise leaves the pad alone).
 - **Audition:** clicking a pad plays it. MIDI notes play the pads in both source modes (§3.5).
@@ -738,3 +743,31 @@ You chose these two from the extras (Send to Clip and multi-out are left).
 
 **Left in Phase 7:** Send to Clip (route C), multi-out, and an audio-feature fallback for the
 classifier.
+
+### Twelve pads (2026-10-29)
+
+A third row of pads (you asked for it): **Rim, Mid tom, Ride and Perc**, on GM notes 37, 47, 51
+and 54. The default kit adds Rim 909, Tom 909 Mid and Ride 909, plus Tamb 707 (the Core Library
+has no 909 tambourine).
+
+- **What follows from it:**
+  - The styles' rim, ride and perc lanes now play their own pads instead of falling back:
+    Reggae's and Bossa Nova's rim on the Rim pad, Jazz's and Punk's ride on the Ride pad,
+    Motown's tambourine on Perc. The fallbacks still apply when a pad's role is changed away.
+  - Tom fills run across three toms.
+  - Randomise and the Ableton kits fill all twelve pads.
+  - The step grid has 12 lanes, and the editor is 960 × 820 (still resizable).
+  - There are 96 pad parameters (8 per pad).
+- **Older sets and kit presets:**
+  - A set saved with 8 pads loads its 8 and leaves pads 9–12 empty: Randomise, a dice or a drop
+    fills them.
+  - An 8-pad kit preset loads its 8 pads and leaves the rest as they are.
+- **Tests:**
+  - The made-up library in `test_kit` gained the new roles.
+  - The pattern tests check Jazz's ride on the Ride pad and Bossa Nova's clave on the Rim pad,
+    and that the fallbacks (rim → snare, ride → closed hats) still work without those pads.
+  - The default kit is twelve Core Library samples.
+  - The editor snapshot was updated.
+  - In Live (`run_live_tests.py`, now 13 checks on this build): Reggae's rim on note 37 with the
+    kick on beat 3 of both bars, and no snare.
+  - `pluginval` strictness 10 passes.

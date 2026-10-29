@@ -1046,16 +1046,17 @@ namespace drumchimp
         libraryStatus.setBounds (statusRow.removeFromRight (380));
         status.setBounds (statusRow);
         r.removeFromBottom (14);
-        grid.setBounds (r.removeFromBottom (168).reduced (10, 8));
+        grid.setBounds (r.removeFromBottom (212).reduced (10, 8));   // 12 lanes of 15, under the bar numbers
         r.removeFromBottom (12);
 
         // Left: the pads, and the pattern's settings under them.
         auto left = r.removeFromLeft (440);
         patternArea = left.removeFromBottom (150);
         left.removeFromBottom (10);
-        const int w = left.getWidth() / 4, h = left.getHeight() / 2;
+        const int rows = (numPads + padsPerRow - 1) / padsPerRow;
+        const int w = left.getWidth() / padsPerRow, h = left.getHeight() / rows;
         for (int i = 0; i < numPads; ++i)
-            pads[(size_t) i]->setBounds (left.getX() + (i % 4) * w, left.getY() + (i / 4) * h, w, h);
+            pads[(size_t) i]->setBounds (left.getX() + (i % padsPerRow) * w, left.getY() + (i / padsPerRow) * h, w, h);
 
         auto pattern = patternArea.reduced (12, 10);
         auto controls = pattern.removeFromTop (26);

@@ -506,13 +506,15 @@ namespace drumchimp
     {
         const auto json = juce::JSON::parse (file.loadFileAsString());
         const auto* pads = json["pads"].getArray();
-        if ((int) json["drumchimpKit"] != 1 || pads == nullptr || pads->size() != numPads)
+        if ((int) json["drumchimpKit"] != 1 || pads == nullptr || pads->isEmpty() || pads->size() > numPads)
         {
             error = file.getFileName() + " isn't a DrumChimp kit";
             return false;
         }
-        KitPaths paths;
-        for (int pad = 0; pad < numPads; ++pad)
+        // A kit saved with fewer pads (8, before the third row) leaves the rest as they are.
+        const int saved = pads->size();
+        KitPaths paths = kitPaths();
+        for (int pad = 0; pad < saved; ++pad)
         {
             const auto& p = pads->getReference (pad);
             roles[(size_t) pad] = padRoleFromId (p["role"].toString().toStdString(), defaultPadRoles[(size_t) pad]);
@@ -528,7 +530,7 @@ namespace drumchimp
         {
             const juce::ScopedLock sl (kitLock);
             for (int pad = 0; pad < numPads; ++pad)
-                if (sources[(size_t) pad].status == PadSource::Status::missing)
+                if (pad < saved && sources[(size_t) pad].status == PadSource::Status::missing)
                     sources[(size_t) pad].fileSize = (juce::int64) pads->getReference (pad)["size"];
         }
         history.record (before, kitPaths());

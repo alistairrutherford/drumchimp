@@ -15,7 +15,9 @@ puts the tempo back. It records into the Arrangement from beat 0 on its own trac
                 the rest on the grid
   3. State      a duplicate of the DrumChimp track plays exactly the same pattern: the pattern is
                 saved with the device, not made again (a new instance would have a new seed)
-  4. 3/4        with Live's set in 3/4, Waltz: every note on its sixteenth, the kick on the 1 of
+  4. 12 pads    Reggae's one drop: the rim on the Rim pad (note 37, the third row), with the
+                kick, on beat 3 of every bar; the snare (38) silent
+  5. 3/4        with Live's set in 3/4, Waltz: every note on its sixteenth, the kick on the 1 of
                 every 3-beat bar and nowhere else, the snare on 2 and 3 (the set goes back to its
                 own time signature after)
 
@@ -169,8 +171,21 @@ def test_state(live, source, rec):
     check(a == b and len(a) > 20, "the copy's notes are the original's (%d and %d)" % (len(a), len(b)))
 
 
+def test_twelve_pads(live, source, rec):
+    print("4. Twelve pads: Reggae's rim on the Rim pad")
+    shown = set_param(live, source, "Style", "Reggae")
+    set_param(live, source, "Humanise", 0.0)
+    set_param(live, source, "Fill", "Off")
+    clear(live, [rec])
+    notes = [n for n in record(live, 8, [rec])[0] if n["start_time"] < 8.0 - 1e-6]
+    rims = sorted({round(n["start_time"], 3) for n in notes if n["pitch"] == 37})
+    kicks = sorted({round(n["start_time"], 3) for n in notes if n["pitch"] == 36})
+    check(shown == "Reggae" and rims == [2.0, 6.0] and kicks == [2.0, 6.0], "the rim (37) and the kick together on beat 3 of both bars: %s, %s" % (rims, kicks))
+    check(not any(n["pitch"] == 38 for n in notes), "and no snare: it has its own pad now")
+
+
 def test_three_four(live, source, rec):
-    print("4. 3/4: Waltz in a 3/4 set")
+    print("5. 3/4: Waltz in a 3/4 set")
     live.call("set_song_properties", signature_numerator=3, signature_denominator=4)
     shown = set_param(live, source, "Style", "Waltz")
     set_param(live, source, "Humanise", 0.0)
@@ -207,6 +222,7 @@ def main():
         test_routing(live, source, rec)
         test_swing(live, source, rec)
         test_state(live, index_of(live, PREFIX + "DrumChimp"), rec)
+        test_twelve_pads(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
         test_three_four(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
     finally:
         live.call("stop_transport")

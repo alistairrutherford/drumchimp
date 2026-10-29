@@ -8,6 +8,8 @@ become MIDI clips in Live. The plan and status are in [PLAN.md](PLAN.md).
 - **Meters:** 3/4 and 6/8 styles (Waltz, Jazz Waltz, 6/8 Ballad, Afro 6/8).
 - **Ableton kits:** Randomise can pick from Ableton's own Drum Rack kits (119 here), or load one
   by name from the Kits menu.
+- **Pads:** twelve pads in three rows: Kick, Snare, Clap, Closed hat, Open hat, Low tom, High tom,
+  Crash, Rim, Mid tom, Ride and Perc.
 - **Editor:** it resizes (drag the corner). Settings lists the library's places and adds your
   own folders, and you can drag a hit in the step grid to set its velocity.
 - **Into Live:** the pattern records on another track through *MIDI From*, every note within a

@@ -1,5 +1,5 @@
 // Phase 3: kits (core/kit/KitBuilder.h) on a made-up library with two complete families (808
-// and Acoustic) and a crowd of unrelated samples: every pad gets its role, Matched kits share a
+// and Acoustic: every role of the 12 default pads) and a crowd of unrelated samples: every pad gets its role, Matched kits share a
 // family and Wild ones mostly don't, locks hold and pull the family their way, toms take their
 // range, nothing repeats, a re-roll changes the pad, the same seed gives the same kit, undo and
 // redo, and finding a missing sample again.
@@ -43,10 +43,15 @@ namespace
                 all.push_back (make ("Pack A", "Tom Lo" + n, Role::tom, { f }, TomRange::low));
                 all.push_back (make ("Pack A", "Tom Hi" + n, Role::tom, { f }, TomRange::high));
                 all.push_back (make ("Pack A", "Crash" + n, Role::crash, { f }));
+                all.push_back (make ("Pack A", "Rim" + n, Role::rim, { f }));
+                all.push_back (make ("Pack A", "Tom Mid" + n, Role::tom, { f }, TomRange::mid));
+                all.push_back (make ("Pack A", "Ride" + n, Role::ride, { f }));
+                all.push_back (make ("Pack A", "Perc" + n, Role::perc, { f }));
             }
         }
         // A crowd with nothing in common: one-off tags in another pack.
-        const std::array<Role, 7> roles { Role::kick, Role::snare, Role::clap, Role::closedHat, Role::openHat, Role::tom, Role::crash };
+        const std::array<Role, 10> roles { Role::kick, Role::snare, Role::clap, Role::closedHat, Role::openHat, Role::tom, Role::crash,
+                                           Role::rim, Role::ride, Role::perc };
         for (int i = 0; i < 140; ++i)
             all.push_back (make ("Pack B", "Other " + std::to_string (i), roles[(size_t) i % roles.size()], { "odd" + std::to_string (i) }));
         all.push_back (make ("Pack B", "Shaker 1", Role::perc, { "odd" }));
@@ -185,13 +190,13 @@ namespace
         }
         check (moves, "a dice on a family's only low tom still changes the pad");
 
-        KitRequest ride;
-        ride.roles[7] = PadRole::ride;              // the library has no rides
-        ride.current[7] = "/somewhere/Ride.wav";
-        const auto kit = buildKit (index, ride);
-        check (kit.paths[7] == "/somewhere/Ride.wav", "a role with no samples keeps the pad's sample");
-        ride.roles[7] = PadRole::perc;
-        check (buildKit (index, ride).paths[7] == "/lib/Pack B/Drums/Shaker 1.wav", "a pad turned to Perc gets the perc");
+        KitRequest ride;                            // the small library has no rides
+        ride.current[10] = "/somewhere/Ride.wav";
+        check (buildKit (small, ride).paths[10] == "/somewhere/Ride.wav", "a role with no samples keeps the pad's sample");
+        KitRequest perc;
+        perc.roles[7] = PadRole::perc;
+        const auto* percInfo = index.find (buildKit (index, perc).paths[7]);
+        check (percInfo != nullptr && percInfo->classification.role == Role::perc, "a pad turned to Perc gets a perc");
 
         KitRequest allLocked;
         allLocked.locked.fill (true);
