@@ -29,7 +29,9 @@
 //   13. CPU      Trap at its busiest, 20 s at 48 kHz / 512: under 2% of a core
 //   14. Snapshot the editor in a known state against Tests/fixtures/snapshot/editor.png
 //
-//   DrumChimpHost [--update-snapshot | --no-library (with DRUMCHIMP_LIBRARY=none)]
+//   DrumChimpHost [--update-snapshot | --no-library (with DRUMCHIMP_LIBRARY=none) | --screenshot FILE]
+//
+// --screenshot writes the README's picture: the default kit, a House pattern, at 2×.
 //
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../../Source/plugin/DrumChimpProcessor.h"
@@ -1048,6 +1050,24 @@ namespace
         }
     }
 
+        void screenshot (const juce::File& file)
+    {
+        DrumChimpProcessor p;
+        waitFor ([&] { return p.library->index() != nullptr && p.padSource (0).status != Status::empty && allSettled (p); }, 20000);
+        setParam (p, "style", 5.0f);                   // House
+        setParam (p, "density", 0.65f);
+        setParam (p, "complexity", 0.55f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+        std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+        editor->setSize (960, 820);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        file.getParentDirectory().createDirectory();
+        file.deleteFile();
+        juce::FileOutputStream out (file);
+        juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f), out);
+        std::cout << "wrote " << file.getFullPathName() << "\n";
+    }
+
     // With DRUMCHIMP_LIBRARY=none: a Mac without Ableton's library.
     void testNoLibrary (const Files& f)
     {
@@ -1080,6 +1100,8 @@ int main (int argc, char** argv)
         Files files;
         if (args.contains ("--no-library"))
             testNoLibrary (files);
+        else if (const int at = args.indexOf ("--screenshot"); at >= 0 && at + 1 < args.size())
+            screenshot (juce::File::getCurrentWorkingDirectory().getChildFile (args[at + 1]));
         else if (args.contains ("--update-snapshot"))
             testSnapshot (true);
         else
