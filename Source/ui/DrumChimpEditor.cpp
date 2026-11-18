@@ -44,7 +44,6 @@ namespace drumchimp
     DragHandle::DragHandle (DrumChimpProcessor& p) : processor (p)
     {
         setMouseCursor (juce::MouseCursor::DraggingHandCursor);
-        setTooltip ("Drag onto a clip slot or the Arrangement: the pattern as a MIDI clip");
     }
 
     void DragHandle::paint (juce::Graphics& g)
@@ -67,7 +66,8 @@ namespace drumchimp
         const auto file = processor.writePatternMidi (error);
         if (! file.existsAsFile())
         {
-            setTooltip (error);
+            if (onError)
+                onError (error);
             return;
         }
         dragging = true;
@@ -90,9 +90,8 @@ namespace drumchimp
     }
 
     //==========================================================================
-    IconButton::IconButton (Icon i, const juce::String& tip) : juce::Button (tip), icon (i)
+    IconButton::IconButton (Icon i, const juce::String& name) : juce::Button (name), icon (i)
     {
-        setTooltip (tip);
         setClickingTogglesState (icon == Icon::lock);
     }
 
@@ -154,7 +153,6 @@ namespace drumchimp
         selected = isSelected;
         noteMap = map;
         lock.setToggleState (processor.isLocked (index), juce::dontSendNotification);
-        setTooltip (source.message.isNotEmpty() ? source.message : source.path);
         repaint();
     }
 
@@ -349,7 +347,6 @@ namespace drumchimp
         dragged = true;
         processor.setStepVelocity (pressedPad, pressedStep, pressedVelocity - e.getDistanceFromDragStartY());
         refresh();
-        setTooltip ("Velocity " + juce::String (pattern.lanes[(size_t) pressedPad][(size_t) pressedStep].velocity));
     }
 
     void StepGrid::mouseUp (const juce::MouseEvent&)
@@ -368,7 +365,6 @@ namespace drumchimp
         list.setRowHeight (40);
         list.setColour (juce::ListBox::backgroundColourId, background);
         addAndMakeVisible (list);
-        add.setTooltip ("Add a folder of your own samples to the library");
         add.onClick = [this]
         {
             chooser = std::make_unique<juce::FileChooser> ("Add a folder of samples", juce::File::getSpecialLocation (juce::File::userMusicDirectory));
@@ -607,6 +603,224 @@ namespace drumchimp
     }
 
     //==========================================================================
+    // The Info View (as NoteCap's): one entry per control, display and panel. Keep each to a line
+    // or two: what it does, and what its settings mean. The per-pad parameters (p1_level …
+    // p12_solo) share "pad.level" … "pad.solo".
+    namespace
+    {
+        struct Info { const char* key; const char* title; const char* text; };
+
+        const Info infoTable[] = {
+            { "settings", "Settings", "The places DrumChimp looks for samples: the Core Library, your User Library, Live's Places, and folders you add." },
+            { "settings.panel", "Library places",
+              "Where DrumChimp finds samples, with how many. Add folder adds your own; Remove folder removes one you added; Rescan looks again." },
+            { "source", "Source",
+              "Generator: the pattern plays with Live's transport and goes to MIDI out. MIDI In: only incoming notes (clips, a keyboard) play the pads." },
+            { "notemap", "Note map",
+              "Which MIDI notes play the pads. GM: the General MIDI drum notes, as a Drum Rack has them. Chromatic: one pad per note from C1." },
+            { "drag", "Drag MIDI",
+              "Drag onto a clip slot or the Arrangement: the pattern as a MIDI clip, Bars long. On this track, set Source to MIDI In so it doesn't play twice." },
+
+            { "randomise", "Randomise kit", "A new sample of its role for every unlocked pad, from your library or from Ableton's Drum Rack kits." },
+            { "undo", "Undo", "Back to the kit before the last change: Randomise, a dice, a drop, Load, Clear or a loaded kit. The last 20 kits." },
+            { "redo", "Redo", "Forward again to the kit you undid." },
+            { "kitsource", "Randomise from",
+              "From library: a kit built from your samples, matched by family. From Ableton kits: one of Ableton's Drum Rack kits, mapped onto the pads." },
+            { "character", "Character",
+              "How alike Randomise's samples are. Matched: one family (808, 909, Acoustified…). Wild: any sample of each role. From library only." },
+            { "kit.family", "Kit", "The family, or the Ableton kit, that Randomise or the Kits menu last chose." },
+            { "kits", "Kits", "Save this kit (samples, roles and pad settings), load a saved one, or load one of Ableton's kits by name." },
+
+            { "pad", "Pad", "Click to select it and hear it. Drop a sample on it, from Live's browser, Finder or the browser here, to load it." },
+            { "pad.lock", "Lock", "Randomise leaves a locked pad as it is." },
+            { "pad.dice", "Dice", "A new sample for this pad alone, of its role." },
+
+            { "browser", "Library browser", "Your library's samples, sorted by role. Pick what it lists, search it, and hear or load a sample." },
+            { "browser.role", "Show", "Which samples the browser lists: the selected pad's role, one role, or everything." },
+            { "browser.search", "Search", "Words to find in a sample's name, folder or pack." },
+            { "browser.list", "Samples", "Click a sample to hear it. Double-click it to load it on the selected pad, or drag it onto any pad." },
+
+            { "group.pad", "Pad settings", "The selected pad: its role, its sample, and how it sounds." },
+            { "pad.role", "Role",
+              "What this pad is for: what Randomise, the dice and the browser give it, and which part of the pattern it plays." },
+            { "pad.sample", "Sample", "Where this pad's sample is and how the library sorted it, or why it can't be found or played." },
+            { "pad.load", "Load...", "Choose a sample file for this pad." },
+            { "pad.clear", "Clear", "Empty this pad." },
+            { "pad.level", "Level", "The pad's volume, from -inf to +6 dB." },
+            { "pad.pan", "Pan", "Where the pad sits between left and right." },
+            { "pad.tune", "Tune", "Pitch, up or down 24 semitones. Higher also plays shorter, lower longer." },
+            { "pad.decay", "Decay", "How fast the sound fades: down 60 dB at this time. Full: the whole sample plays." },
+            { "pad.vel", "Velocity", "How much a hit's velocity changes its level. 0%: every hit at full level." },
+            { "pad.choke", "Choke", "Pads in the same group cut each other off. The hats share A: a closed hat stops an open one." },
+            { "pad.mute", "Mute", "Silences this pad." },
+            { "pad.solo", "Solo", "Only soloed pads play." },
+
+            { "group.pattern", "Pattern", "The settings the pattern is made from. Changing one remakes the pattern; Generate makes a new one." },
+            { "style", "Style", "The groove the pattern is made from: 24 styles, in 4/4, 3/4 and 6/8. A new style brings its own swing." },
+            { "bars", "Bars", "The pattern's length: 1, 2, 4 or 8 bars. It loops from the song's bar 1." },
+            { "fill", "Fill", "A fill (toms or snare) in the last beat or two of every 2, 4 or 8 bars, then a crash. Or no fills." },
+            { "ghosts", "Ghost notes", "On: quiet in-between notes, mostly on the snare. Off: none." },
+            { "generate", "Generate", "A new pattern in this style. Changing a setting remakes this one instead." },
+            { "density", "Density", "How many of the style's hits play. More only ever adds hits." },
+            { "complexity", "Complexity",
+              "How far the pattern strays from the style's groove: variations, ghost notes, rolls. At 0 (Density 50% or more) it plays the groove as written." },
+            { "swing", "Swing", "Delays every second sixteenth. 50%: straight. 66%: a triplet feel. 75%: the most." },
+            { "humanise", "Humanise", "Small random changes to timing (up to 12 ms) and velocity (up to 14)." },
+
+            { "grid", "Step grid", "The pattern: a lane per pad, brighter for a harder hit, dots for a roll, and the playhead." },
+            { "grid.step", "Step", "Click an empty step to add a hit, or a hit to remove it. Drag a hit up or down for its velocity." },
+            { "grid.lock", "Lane lock", "A locked lane keeps its hits when you Generate or change a setting." },
+
+            { "display.status", "Status",
+              "Transport, tempo, notes in and out. Or a warning: a clip doubling the generator, a missing sample, or a time signature that differs from the style's." },
+            { "display.library", "Library", "How many drums DrumChimp found in your Ableton library, and in how many places. Settings lists them." },
+
+            { "instance", "Instance ID", "Tells this DrumChimp apart from others for scripts in Live. Not a sound setting, and not shown." },
+        };
+
+        const Info* findInfo (const juce::String& key)
+        {
+            const auto base = key.upToFirstOccurrenceOf (":", false, false);   // "pad:3" → "pad"
+            for (const auto& i : infoTable)
+                if (base == i.key)
+                    return &i;
+            return nullptr;
+        }
+
+        const char* defaultInfoText = "Point at a control or display to see what it does.";
+
+        // The table is UTF-8 (…, ·): a juce::String made from a plain char* would read it as Latin-1.
+        juce::String utf8 (const char* s) { return juce::String::fromUTF8 (s); }
+    }
+
+    void InfoView::show (const juce::String& newTitle, const juce::String& newText)
+    {
+        if (newTitle == title && newText == text)
+            return;
+        title = newTitle;
+        text = newText;
+        repaint();
+    }
+
+    void InfoView::paint (juce::Graphics& g)
+    {
+        auto r = getLocalBounds().toFloat();
+        g.setColour (panel);
+        g.fillRoundedRectangle (r, 6.0f);
+        r = r.reduced (14.0f, 8.0f);
+        if (title.isNotEmpty())
+        {
+            g.setColour (drumchimp::text);                  // the colour (this->text is what's shown)
+            g.setFont (font (13.0f, true));
+            g.drawText (title, r.removeFromTop (18.0f), juce::Justification::centredLeft);
+        }
+        g.setColour (title.isEmpty() ? dim : drumchimp::text.withAlpha (0.85f));
+        g.setFont (font (12.5f));
+        g.drawFittedText (this->text, r.toNearestInt(), juce::Justification::topLeft, 2, 1.0f);
+    }
+
+    juce::String DrumChimpEditor::infoKeyForParameter (const juce::String& id)
+    {
+        // p1_level … p12_solo → pad.level … pad.solo
+        if (id.startsWithChar ('p') && id.containsChar ('_') && id.substring (1, id.indexOfChar ('_')).containsOnly ("0123456789"))
+            return "pad." + id.fromFirstOccurrenceOf ("_", false, false);
+        return id;
+    }
+
+    juce::String DrumChimpEditor::infoTitle (const juce::String& key)
+    {
+        const auto* i = findInfo (key);
+        return i != nullptr ? utf8 (i->title) : juce::String();
+    }
+
+    juce::String DrumChimpEditor::infoText (const juce::String& key)
+    {
+        const auto* i = findInfo (key);
+        return i != nullptr ? utf8 (i->text) : juce::String();
+    }
+
+    juce::String DrumChimpEditor::infoKeyAt (juce::Point<int> p) const
+    {
+        // A velocity drag keeps showing the hit being dragged.
+        int pad, step;
+        if (grid.draggingCell (pad, step))
+            return "grid.step:" + juce::String (pad) + ":" + juce::String (step);
+        for (const auto& r : infoRegions)
+            if (r.area.contains (p))
+            {
+                if (r.key == "grid" && grid.cellAt (p - grid.getPosition(), pad, step))
+                    return "grid.step:" + juce::String (pad) + ":" + juce::String (step);
+                return r.key;
+            }
+        return {};
+    }
+
+    // What a key shows: its entry, and for a pad, a step or the library, what's there now.
+    void DrumChimpEditor::showInfoFor (const juce::String& key)
+    {
+        hoveredKey = key;
+        const auto* i = findInfo (key);
+        if (i == nullptr)
+        {
+            infoView.show ({}, defaultInfoText);
+            return;
+        }
+        juce::String title = utf8 (i->title), body = utf8 (i->text);
+        const auto dot = utf8 (" \xc2\xb7 ");
+        const auto parts = juce::StringArray::fromTokens (key, ":", "");
+        if (parts[0] == "pad" && parts.size() == 2)
+        {
+            const int pad = parts[1].getIntValue();
+            const auto s = processor.padSource (pad);
+            title = "Pad " + juce::String (pad + 1) + dot + padRoleName (processor.padRole (pad)) + dot
+                    + juce::MidiMessage::getMidiNoteName (noteForPad (seenMap, pad), true, true, 3);
+            body = (s.message.isNotEmpty() ? s.message : s.path.isNotEmpty() ? juce::File (s.path).getFileName() : juce::String ("Empty"))
+                   + ". " + body;
+        }
+        else if (parts[0] == "grid.step" && parts.size() == 3)
+        {
+            const int pad = parts[1].getIntValue(), step = parts[2].getIntValue();
+            const auto& pattern = grid.shownPattern();
+            const int beat = std::max (1, pattern.stepsPerBeat);
+            title = juce::String (padRoleName (processor.padRole (pad))) + dot + "bar " + juce::String (step / pattern.stepsPerBar + 1)
+                    + ", beat " + juce::String ((step % pattern.stepsPerBar) / beat + 1);
+            if (pad >= 0 && pad < numPads && step >= 0 && step < pattern.steps())
+            {
+                const auto& c = pattern.lanes[(size_t) pad][(size_t) step];
+                title << dot << (c.velocity > 0 ? "velocity " + juce::String ((int) c.velocity) + (c.repeats > 1 ? ", a roll of " + juce::String ((int) c.repeats) : juce::String())
+                                                : juce::String ("no hit"));
+            }
+        }
+        else if (key == "display.library")
+            if (const auto lib = processor.library->status(); lib.protectedFiles > 0)
+                body << " " << (int) lib.protectedFiles << " samples in Ableton Packs are left out: they're protected, and only Live can play them.";
+        infoView.show (title, body);
+    }
+
+    void DrumChimpEditor::updateInfo (const juce::MouseEvent& e)
+    {
+        const auto key = infoKeyAt (e.getEventRelativeTo (&content).getPosition());
+        if (key != hoveredKey || key.startsWith ("grid.step"))   // a step's velocity can change under the mouse
+            showInfoFor (key);
+    }
+
+    void DrumChimpEditor::mouseEnter (const juce::MouseEvent& e) { updateInfo (e); }
+    void DrumChimpEditor::mouseMove (const juce::MouseEvent& e)  { updateInfo (e); }
+    void DrumChimpEditor::mouseDrag (const juce::MouseEvent& e)  { updateInfo (e); }
+
+    void DrumChimpEditor::mouseExit (const juce::MouseEvent& e)
+    {
+        // Moving between child components also sends exits; clear only when leaving the editor.
+        if (! getLocalBounds().contains (e.getEventRelativeTo (this).getPosition()))
+            showInfoFor ({});
+    }
+
+    void DrumChimpEditor::addInfoRegion (const juce::Component& c, const juce::String& key)
+    {
+        infoRegions.push_back ({ content.getLocalArea (&c, c.getLocalBounds()), key });
+    }
+
+    //==========================================================================
     DrumChimpEditor::DrumChimpEditor (DrumChimpProcessor& p)
         : AudioProcessorEditor (p), processor (p), dragHandle (p), browser (p, [this] { return selected; }), grid (p), settings (p)
     {
@@ -625,25 +839,19 @@ namespace drumchimp
         setLookAndFeel (&lookAndFeel);
 
         source.addItemList ({ "Generator", "MIDI In" }, 1);
-        source.setTooltip ("Generator: the test pattern plays with Live's transport and goes to MIDI out. MIDI In: only incoming notes play the pads");
         sourceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "source", source);
         noteMap.addItemList ({ "GM", "Chromatic" }, 1);
-        noteMap.setTooltip ("Which notes play the pads. GM: the General MIDI drum notes (they also play a Drum Rack). Chromatic: C1 to G1");
         noteMapAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "notemap", noteMap);
         content.addAndMakeVisible (source);
         content.addAndMakeVisible (noteMap);
         content.addAndMakeVisible (dragHandle);
 
-        randomise.setTooltip ("A new kit from your library for every unlocked pad");
         randomise.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
         randomise.onClick = [this] { processor.randomiseKit(); };
         undo.onClick = [this] { processor.undoKit(); };
         redo.onClick = [this] { processor.redoKit(); };
-        kits.setTooltip ("Save this kit (samples, roles and sounds), load a saved one, or load one of Ableton's kits");
         kitSource.addItem ("From library", 1);
         kitSource.addItem ("From Ableton kits", 2);
-        kitSource.setTooltip ("Where Randomise takes a kit from: your library (sorted by role, matched by family), "
-                              "or Ableton's own Drum Rack kits (the Core Library's, mapped onto the pads)");
         kitSource.setSelectedId (p.kitsFromRacks() ? 2 : 1, juce::dontSendNotification);
         kitSource.onChange = [this] { processor.setKitsFromRacks (kitSource.getSelectedId() == 2); };
         content.addAndMakeVisible (kitSource);
@@ -655,7 +863,6 @@ namespace drumchimp
         characterLabel.setFont (font (12.0f));
         characterLabel.setColour (juce::Label::textColourId, dim);
         characterLabel.setJustificationType (juce::Justification::centredRight);
-        character.setTooltip ("Randomise: Matched keeps a kit to one family (a machine, a pack's sound); Wild takes any sample of each role");
         characterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, "character", character);
         familyLabel.setFont (font (12.0f));
         familyLabel.setColour (juce::Label::textColourId, dim);
@@ -680,7 +887,6 @@ namespace drumchimp
 
         for (int r = 0; r < numPadRoles; ++r)
             padRole.addItem (padRoleNames[(size_t) r], r + 1);
-        padRole.setTooltip ("What this pad is for: what Randomise and its dice pick, and what the browser shows");
         padRole.onChange = [this]
         {
             processor.setPadRole (selected, (PadRole) (padRole.getSelectedId() - 1));
@@ -701,15 +907,12 @@ namespace drumchimp
         const auto& styleList = DrumChimpProcessor::styles();
         for (size_t i = 0; i < styleList.size(); ++i)
             style.addItem (styleList[i].name, (int) i + 1);
-        style.setTooltip ("The style the pattern is made from. A new style brings its own swing");
         styleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "style", style);
         bars.addItemList ({ "1 bar", "2 bars", "4 bars", "8 bars" }, 1);
         barsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "bars", bars);
         fill.addItemList ({ "No fills", "Fill every 2", "Fill every 4", "Fill every 8" }, 1);
-        fill.setTooltip ("A fill in the last beat (or two) of every 2, 4 or 8 bars, then a crash");
         fillAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.state, "fill", fill);
         ghostsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.state, "ghosts", ghosts);
-        generate.setTooltip ("A new pattern in this style (a new seed). Changing a setting remakes this one");
         generate.setColour (juce::TextButton::buttonColourId, accent.withAlpha (0.25f));
         generate.onClick = [this] { processor.newPattern(); };
         for (auto* c : std::initializer_list<juce::Component*> { &style, &bars, &fill, &ghosts, &generate })
@@ -722,7 +925,6 @@ namespace drumchimp
         }
         content.addAndMakeVisible (grid);
         choke.addItemList (params::chokeGroups, 1);
-        choke.setTooltip ("Choke group: a pad cuts off the other pads in its group (the hats share A)");
         content.addAndMakeVisible (choke);
         content.addAndMakeVisible (mute);
         content.addAndMakeVisible (solo);
@@ -736,23 +938,27 @@ namespace drumchimp
         libraryStatus.setComponentID ("libraryStatus");      // the snapshot test masks it: it's this Mac's
         content.addAndMakeVisible (libraryStatus);
 
-        settingsButton.setTooltip ("The library's places: add your own folders, rescan");
         settingsButton.setComponentID ("settingsButton");
         settingsButton.onClick = [this]
         {
             settings.refresh();
             settings.setVisible (! settings.isVisible());
             settings.toFront (false);
+            layout();                              // its Info View area comes and goes with it
         };
         content.addAndMakeVisible (settingsButton);
-        settings.onClose = [this] { settings.setVisible (false); };
+        settings.onClose = [this] { settings.setVisible (false); layout(); };
         content.addChildComponent (settings);
+        content.addAndMakeVisible (infoView);
+        infoView.show ({}, defaultInfoText);
+        dragHandle.onError = [this] (const juce::String& error) { infoView.show ("Drag MIDI", error); };
 
         const float scale = processor.uiScale;   // read first: the limits below resize (and resized() saves the size)
         setResizable (true, true);
         setResizeLimits (baseWidth * 7 / 10, baseHeight * 7 / 10, baseWidth * 3 / 2, baseHeight * 3 / 2);
         getConstrainer()->setFixedAspectRatio ((double) baseWidth / baseHeight);
         setSize (juce::roundToInt (baseWidth * scale), juce::roundToInt (baseHeight * scale));
+        addMouseListener (this, true);   // hover over any child updates the Info View
         select (0);
         startTimerHz (30);
     }
@@ -978,9 +1184,6 @@ namespace drumchimp
                                    : "Library: " + juce::String ((int) lib.drums) + " drums in " + juce::String ((int) lib.samples) + " samples, "
                                          + juce::String ((int) lib.roots) + " places" + (lib.scanning ? juce::String (" (scanning again)") : juce::String()),
                                juce::dontSendNotification);
-        libraryStatus.setTooltip (lib.protectedFiles > 0 ? juce::String ((int) lib.protectedFiles) + " samples in your Ableton Packs are protected: only Live can play them, "
-                                                                "so DrumChimp leaves them out. It uses the Core Library, your User Library and your own folders"
-                                                         : juce::String());
         randomise.setEnabled (processor.library->index() != nullptr);
     }
 
@@ -1014,8 +1217,10 @@ namespace drumchimp
 
     void DrumChimpEditor::layout()
     {
-        settings.setBounds (content.getLocalBounds().reduced (120, 90));
+        settings.setBounds (content.getLocalBounds().reduced (120, 90).withTrimmedBottom (64));
         auto r = content.getLocalBounds().reduced (16);
+        infoView.setBounds (r.removeFromBottom (54));
+        r.removeFromBottom (10);
         auto top = r.removeFromTop (28);
         dragHandle.setBounds (top.removeFromRight (120));
         top.removeFromRight (10);
@@ -1108,5 +1313,42 @@ namespace drumchimp
         bottomRow.removeFromLeft (16);
         mute.setBounds (bottomRow.removeFromLeft (70));
         solo.setBounds (bottomRow.removeFromLeft (70));
+
+        // Info View areas, most specific first: a lock before its pad, a knob before its panel.
+        infoRegions.clear();
+        if (settings.isVisible())
+            infoRegions.push_back ({ settings.getBounds(), "settings.panel" });
+        const std::pair<const juce::Component*, const char*> hoverable[] {
+            { &settingsButton, "settings" }, { &source, "source" }, { &noteMap, "notemap" }, { &dragHandle, "drag" },
+            { &randomise, "randomise" }, { &undo, "undo" }, { &redo, "redo" }, { &kitSource, "kitsource" }, { &characterLabel, "character" },
+            { &character, "character" }, { &familyLabel, "kit.family" }, { &kits, "kits" },
+            { &padRole, "pad.role" }, { &padTitle, "pad.role" }, { &loadButton, "pad.load" }, { &clearButton, "pad.clear" }, { &padSample, "pad.sample" },
+            { &choke, "pad.choke" }, { &mute, "pad.mute" }, { &solo, "pad.solo" },
+            { &style, "style" }, { &bars, "bars" }, { &fill, "fill" }, { &ghosts, "ghosts" }, { &generate, "generate" },
+            { &status, "display.status" }, { &libraryStatus, "display.library" },
+        };
+        for (const auto& [c, key] : hoverable)
+            addInfoRegion (*c, key);
+        for (auto& k : knobs)
+        {
+            const auto key = juce::String ("pad.") + k.id;
+            infoRegions.push_back ({ content.getLocalArea (&k.slider, k.slider.getLocalBounds()).getUnion (content.getLocalArea (&k.label, k.label.getLocalBounds())), key });
+        }
+        for (auto& k : patternKnobs)
+            infoRegions.push_back ({ content.getLocalArea (&k.slider, k.slider.getLocalBounds()).getUnion (content.getLocalArea (&k.label, k.label.getLocalBounds())), k.id });
+        for (int i = 0; i < numPads; ++i)
+        {
+            addInfoRegion (pads[(size_t) i]->lockButton(), "pad.lock");
+            addInfoRegion (pads[(size_t) i]->diceButton(), "pad.dice");
+            addInfoRegion (*pads[(size_t) i], "pad:" + juce::String (i));
+            addInfoRegion (grid.laneLock (i), "grid.lock");
+        }
+        addInfoRegion (browser.roleBox(), "browser.role");
+        addInfoRegion (browser.searchBox(), "browser.search");
+        addInfoRegion (browser.listBox(), "browser.list");
+        infoRegions.push_back ({ grid.getBounds(), "grid" });
+        infoRegions.push_back ({ padPanelArea, "group.pad" });
+        infoRegions.push_back ({ patternArea, "group.pattern" });
+        infoRegions.push_back ({ browserArea, "browser" });
     }
 }

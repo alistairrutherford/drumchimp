@@ -771,3 +771,33 @@ has no 909 tambourine).
   - In Live (`run_live_tests.py`, now 13 checks on this build): Reggae's rim on note 37 with the
     kick on beat 3 of both bars, and no snare.
   - `pluginval` strictness 10 passes.
+
+### Info View (2026-11-18)
+
+A strip along the bottom of the editor, the same as NoteCap's (and like Live's own Info View).
+Pointing at any control, display or panel shows a bold title and a line or two on what it does and
+what its settings mean; elsewhere it shows a short hint.
+
+- **How it works:**
+  - One description table (`DrumChimpEditor.cpp`). It's keyed by parameter ID; the 96 per-pad
+    parameters share one entry each (`p1_level` … `p12_level` → *pad.level*). It also covers the
+    buttons, menus, displays and panels that aren't parameters.
+  - Hover areas are rebuilt in `layout()`, most specific first: a lock before its pad, a knob
+    before its panel, a grid step before the grid.
+  - The editor listens to every child's mouse events. They're read in the 960 × 884 layout's own
+    coordinates, so they work at any window size.
+- **What's shown now, beyond NoteCap's:**
+  - a pad gives its number, role, note and sample, or why it can't be found or played;
+  - a grid step gives its lane, bar, beat and velocity, and keeps showing it while you drag the
+    velocity;
+  - the library status says how many Pack samples are left out.
+- **Tooltips removed:** the Info View replaces them. The drag-out's one error now shows in the
+  strip.
+- **Size:** the editor is 64 px taller, at 960 × 884. The README screenshot shows the strip.
+- **Tests** (host test 15), all passing:
+  - all 108 parameters have a description (20 entries), each at most 200 characters;
+  - every control, display and panel has a hover area (57 areas);
+  - the strip itself isn't a hover area;
+  - a pad and a grid step say what they hold.
+
+  The editor snapshot was updated. `pluginval` strictness 10 passes.

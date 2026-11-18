@@ -1,5 +1,5 @@
-// The editor (PLAN.md §5), Phase 6. Everything is laid out at 960 × 820 in `content`, which is
-// scaled to the window: drag the corner to resize (70%–150%, kept with the set).
+// The editor (PLAN.md §5). Everything is laid out at 960 × 884 in `content`, which is scaled to
+// the window: drag the corner to resize (70%–150%, kept with the set).
 //
 //   Header      Source (Generator / MIDI In), Note map (GM / Chromatic), and the drag handle:
 //               the pattern as a .mid to drop on a clip slot
@@ -22,6 +22,9 @@
 //               Rescan; why Ableton Pack samples aren't there
 //   Status      transport, notes in and out, or a warning (a clip doubling the generator, a
 //               missing sample); the library scan
+//   Info View   a strip along the bottom, like Live's: point at any control, display or panel to see
+//               what it does (the same as NoteCap's). Pads, grid steps and the library status add
+//               what they show now. It replaces tooltips.
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -29,11 +32,11 @@
 
 namespace drumchimp
 {
-    class DragHandle : public juce::Component,
-                       public juce::SettableTooltipClient
+    class DragHandle : public juce::Component
     {
     public:
         explicit DragHandle (DrumChimpProcessor& p);
+        std::function<void (const juce::String&)> onError;   // the .mid couldn't be written
         void paint (juce::Graphics&) override;
         void mouseDrag (const juce::MouseEvent&) override;
         void mouseUp (const juce::MouseEvent&) override;
@@ -48,7 +51,7 @@ namespace drumchimp
     {
     public:
         enum class Icon { lock, dice };
-        IconButton (Icon i, const juce::String& tip);
+        IconButton (Icon i, const juce::String& name);
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
 
     private:
@@ -56,7 +59,6 @@ namespace drumchimp
     };
 
     class PadButton : public juce::Component,
-                      public juce::SettableTooltipClient,
                       public juce::FileDragAndDropTarget,
                       public juce::DragAndDropTarget
     {
@@ -80,6 +82,8 @@ namespace drumchimp
         void refresh (bool selected, NoteMap map);
         void hit() { flash = 1.0f; repaint(); }
         void fade();
+        const juce::Component& lockButton() const noexcept { return lock; }
+        const juce::Component& diceButton() const noexcept { return dice; }
 
     private:
         void setDragOver (bool over) { dragOver = over; repaint(); }
@@ -87,8 +91,8 @@ namespace drumchimp
         DrumChimpProcessor& processor;
         const int index;
         std::function<void (int)> onSelect;
-        IconButton lock { IconButton::Icon::lock, "Lock: Randomise leaves this pad alone" };
-        IconButton dice { IconButton::Icon::dice, "A new sample for this pad, of its role" };
+        IconButton lock { IconButton::Icon::lock, "Lock" };
+        IconButton dice { IconButton::Icon::dice, "Dice" };
         DrumChimpProcessor::PadSource source;
         bool selected = false, dragOver = false;
         NoteMap noteMap = NoteMap::gm;
@@ -96,8 +100,7 @@ namespace drumchimp
     };
 
     // The pattern, a lane per pad.
-    class StepGrid : public juce::Component,
-                     public juce::SettableTooltipClient
+    class StepGrid : public juce::Component
     {
     public:
         explicit StepGrid (DrumChimpProcessor& p);
@@ -109,9 +112,19 @@ namespace drumchimp
         void refresh();                    // the pattern, the locks or the pads' roles changed
         void setPlayhead (int step);
 
+        // For the Info View: the cell at `p` (grid coordinates), what's in it, and a lane's lock.
+        bool cellAt (juce::Point<int> p, int& pad, int& step) const;
+        const Pattern& shownPattern() const noexcept { return pattern; }
+        const juce::Component& laneLock (int pad) const { return *locks[(size_t) pad]; }
+        bool draggingCell (int& pad, int& step) const noexcept   // a hit being dragged for its velocity
+        {
+            pad = pressedPad;
+            step = pressedStep;
+            return pressedPad >= 0 && dragged;
+        }
+
     private:
         juce::Rectangle<int> cellArea() const;
-        bool cellAt (juce::Point<int> p, int& pad, int& step) const;
 
         DrumChimpProcessor& processor;
         Pattern pattern;
@@ -131,6 +144,9 @@ namespace drumchimp
         Browser (DrumChimpProcessor& p, std::function<int()> selectedPad);
         void resized() override;
         void refresh();                    // the library or the selected pad changed
+        const juce::Component& roleBox() const noexcept { return role; }      // the Info View's areas
+        const juce::Component& searchBox() const noexcept { return search; }
+        const juce::Component& listBox() const noexcept { return list; }
 
     private:
         int getNumRows() override { return (int) rows.size(); }
@@ -175,6 +191,19 @@ namespace drumchimp
         std::unique_ptr<juce::FileChooser> chooser;
     };
 
+    // Live-style Info View: a strip along the bottom describing whatever the mouse is over.
+    class InfoView : public juce::Component
+    {
+    public:
+        void show (const juce::String& title, const juce::String& text);
+        void paint (juce::Graphics&) override;
+        const juce::String& getTitle() const noexcept { return title; }
+        const juce::String& getText() const noexcept { return text; }
+
+    private:
+        juce::String title, text;
+    };
+
     class DrumChimpEditor : public juce::AudioProcessorEditor,
                             public juce::DragAndDropContainer,
                             private juce::Timer
@@ -185,6 +214,22 @@ namespace drumchimp
 
         void paint (juce::Graphics&) override;
         void resized() override;
+
+        void mouseEnter (const juce::MouseEvent&) override;
+        void mouseMove (const juce::MouseEvent&) override;
+        void mouseDrag (const juce::MouseEvent&) override;
+        void mouseExit (const juce::MouseEvent&) override;
+
+        // Info View: the key ("density", "pad:3", "grid.step:1:12" …) of the area at `p`, in the
+        // 960 × 884 layout's coordinates; a key's title and text (a parameter's ID gives its own);
+        // and showing one directly (the tests and the screenshot).
+        juce::String infoKeyAt (juce::Point<int> p) const;
+        static juce::String infoKeyForParameter (const juce::String& paramID);
+        static juce::String infoTitle (const juce::String& key);
+        static juce::String infoText (const juce::String& key);
+        void showInfoFor (const juce::String& key);
+        const InfoView& info() const noexcept { return infoView; }
+        static constexpr int baseWidth = 960, baseHeight = 884;
 
     private:
         struct Knob
@@ -199,7 +244,6 @@ namespace drumchimp
             std::function<void (juce::Graphics&)> onPaint;
             void paint (juce::Graphics& g) override { if (onPaint) onPaint (g); }
         };
-        static constexpr int baseWidth = 960, baseHeight = 820;
         static constexpr int padsPerRow = 4;
 
         void timerCallback() override;
@@ -211,11 +255,12 @@ namespace drumchimp
         void showKitsMenu();
         void saveKit();
         void setUpKnob (Knob& k, const char* name);
+        void updateInfo (const juce::MouseEvent&);
+        void addInfoRegion (const juce::Component& c, const juce::String& key);
 
         DrumChimpProcessor& processor;
         juce::LookAndFeel_V4 lookAndFeel;
         Content content;                   // first: every other component is its child
-        juce::TooltipWindow tooltips { this };
         juce::TextButton settingsButton { "Settings" };
 
         juce::ComboBox source, noteMap;
@@ -258,6 +303,10 @@ namespace drumchimp
         juce::uint32 doubledUntil = 0;     // ms: the status line warns until then
 
         juce::Label status, libraryStatus;
+        InfoView infoView;
+        struct InfoRegion { juce::Rectangle<int> area; juce::String key; };
+        std::vector<InfoRegion> infoRegions;          // in content coordinates, most specific first
+        juce::String hoveredKey;
         juce::uint32 seenKit = ~0u, seenLibrary = ~0u;
         NoteMap seenMap = NoteMap::gm;
         juce::Rectangle<int> padPanelArea, browserArea, patternArea;

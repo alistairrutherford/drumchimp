@@ -28,13 +28,18 @@
 //   12. Places   a folder added in Settings is scanned and sorted; removed, it's gone
 //   13. CPU      Trap at its busiest, 20 s at 48 kHz / 512: under 2% of a core
 //   14. Snapshot the editor in a known state against Tests/fixtures/snapshot/editor.png
+//   15. Info View every parameter has a description (at most 200 characters), every control,
+//                display and panel has a hover area, the strip itself isn't one, and a pad and a
+//                grid step say what they hold
 //
 //   DrumChimpHost [--update-snapshot | --no-library (with DRUMCHIMP_LIBRARY=none) | --screenshot FILE]
 //
-// --screenshot writes the README's picture: the default kit, a House pattern, at 2×.
+// --screenshot writes the README's picture: the default kit, a House pattern, the Info View on
+// Complexity, at 2×.
 //
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../../Source/plugin/DrumChimpProcessor.h"
+#include "../../Source/ui/DrumChimpEditor.h"
 #include <iostream>
 #include <set>
 #include <pthread.h>
@@ -914,8 +919,8 @@ namespace
         p.uiScale = 1.25f;
         {
             std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-            check (editor->getWidth() == 1200 && editor->getHeight() == 1025, "opens at its saved size (125%: 1200 × 1025)");
-            editor->setSize (768, 656);
+            check (editor->getWidth() == 1200 && editor->getHeight() == 1105, "opens at its saved size (125%: 1200 x 1105)");
+            editor->setSize (768, 707);
             check (std::abs (p.uiScale - 0.8f) < 0.001f, "a resize is kept (80%)");
         }
         juce::MemoryBlock state;
@@ -1003,7 +1008,7 @@ namespace
         juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
 
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (960, 820);
+        editor->setSize (DrumChimpEditor::baseWidth, DrumChimpEditor::baseHeight);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
         auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
         for (auto* child : editor->getChildren())     // the editor's one child is its content, at scale 1 here
@@ -1059,13 +1064,81 @@ namespace
         setParam (p, "complexity", 0.55f);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (960, 820);
+        editor->setSize (DrumChimpEditor::baseWidth, DrumChimpEditor::baseHeight);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        if (auto* ed = dynamic_cast<DrumChimpEditor*> (editor.get()))
+            ed->showInfoFor ("complexity");            // the Info View, as if pointing at Complexity
         file.getParentDirectory().createDirectory();
         file.deleteFile();
         juce::FileOutputStream out (file);
         juce::PNGImageFormat().writeImageToStream (editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f), out);
         std::cout << "wrote " << file.getFullPathName() << "\n";
+    }
+
+    void testInfoView()
+    {
+        std::cout << "15. Info View\n";
+        DrumChimpProcessor p;
+        waitFor ([&] { return p.library->index() != nullptr && p.padSource (0).status != Status::empty && allSettled (p); }, 20000);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        auto* editor = dynamic_cast<DrumChimpEditor*> (ed.get());
+        check (editor != nullptr, "the editor is DrumChimp's");
+        if (editor == nullptr)
+            return;
+
+        // Every parameter has a short description.
+        std::set<std::string> paramKeys;
+        std::string missing, tooLong;
+        for (auto* param : p.getParameters())
+            if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
+            {
+                const auto key = DrumChimpEditor::infoKeyForParameter (withID->paramID);
+                paramKeys.insert (key.toStdString());
+                if (DrumChimpEditor::infoTitle (key).isEmpty() || DrumChimpEditor::infoText (key).isEmpty())
+                    missing += withID->paramID.toStdString() + " ";
+                if (DrumChimpEditor::infoText (key).length() > 200)
+                    tooLong += key.toStdString() + " ";
+            }
+        check (missing.empty(), "every parameter has an Info View description (" + juce::String ((int) p.getParameters().size()) + " parameters, "
+                                    + juce::String ((int) paramKeys.size()) + " descriptions)" + (missing.empty() ? juce::String() : "; missing: " + missing));
+
+        // Every control, display and panel can be pointed at.
+        std::set<std::string> found;
+        for (int y = 0; y < DrumChimpEditor::baseHeight; y += 3)
+            for (int x = 0; x < DrumChimpEditor::baseWidth; x += 3)
+                if (const auto key = editor->infoKeyAt ({ x, y }); key.isNotEmpty())
+                    found.insert ((key.startsWith ("grid.step") ? juce::String ("grid.step") : key).toStdString());
+        std::vector<std::string> wanted (paramKeys.begin(), paramKeys.end());
+        wanted.erase (std::remove (wanted.begin(), wanted.end(), "instance"), wanted.end());   // not shown
+        for (const char* k : { "settings", "drag", "randomise", "undo", "redo", "kitsource", "kit.family", "kits", "pad.lock", "pad.dice",
+                               "browser", "browser.role", "browser.search", "browser.list", "group.pad", "pad.role", "pad.sample", "pad.load",
+                               "pad.clear", "group.pattern", "generate", "grid", "grid.step", "grid.lock", "display.status", "display.library" })
+            wanted.push_back (k);
+        for (int pad = 0; pad < numPads; ++pad)
+            wanted.push_back ("pad:" + std::to_string (pad));
+        std::string unreachable;
+        for (const auto& k : wanted)
+        {
+            if (! found.count (k))
+                unreachable += k + " ";
+            if (DrumChimpEditor::infoText (k).length() > 200)
+                tooLong += k + " ";
+        }
+        check (unreachable.empty(), "every control, display and panel has a hover area (" + juce::String ((int) found.size()) + " areas)"
+                                        + (unreachable.empty() ? juce::String() : "; none for: " + unreachable));
+        check (tooLong.empty(), "descriptions stay brief, at most 200 characters" + (tooLong.empty() ? juce::String() : " (too long: " + tooLong + ")"));
+        check (editor->infoKeyAt ({ DrumChimpEditor::baseWidth / 2, DrumChimpEditor::baseHeight - 40 }).isEmpty(), "the strip itself isn't a hover area");
+
+        // What's shown: a parameter's entry, a pad and a step with what they hold, and the hint.
+        editor->showInfoFor ("complexity");
+        check (editor->info().getTitle() == "Complexity" && editor->info().getText().contains ("as written"), "pointing at Complexity explains it");
+        editor->showInfoFor ("pad:0");
+        check (editor->info().getTitle() == "Pad 1 · Kick · C1" && editor->info().getText().startsWith ("Kick 909 2.wav"),
+               "a pad names its role, note and sample: " + editor->info().getTitle() + ", " + editor->info().getText().upToFirstOccurrenceOf (".", true, false));
+        editor->showInfoFor ("grid.step:0:0");
+        check (editor->info().getTitle().startsWith ("Kick · bar 1, beat 1 · velocity "), "a grid step names its lane, bar, beat and velocity: " + editor->info().getTitle());
+        editor->showInfoFor ({});
+        check (editor->info().getTitle().isEmpty() && editor->info().getText().startsWith ("Point at"), "elsewhere, a short hint");
     }
 
     // With DRUMCHIMP_LIBRARY=none: a Mac without Ableton's library.
@@ -1120,6 +1193,7 @@ int main (int argc, char** argv)
             testPlaces (files);
             testCpu();
             testSnapshot (false);
+            testInfoView();
         }
     }
     std::cout << (failures == 0 ? "\nDrumChimpHost: all passed\n" : "\n*** DrumChimpHost: " + std::to_string (failures) + " failure(s)\n");
