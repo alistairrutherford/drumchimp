@@ -801,3 +801,17 @@ what its settings mean; elsewhere it shows a short hint.
   - a pad and a grid step say what they hold.
 
   The editor snapshot was updated. `pluginval` strictness 10 passes.
+
+### Release 0.12.0 (2026-11-18)
+
+The first GitHub release.
+
+- **Version:** 0.12.0 in `DrumChimp.jucer` and `Tests/Host/HostDefines.h`. `CHANGELOG.md` is new
+  (0.12.0: the Info View; 0.11.0, not released) and the README has a version line. All in one
+  commit, `724b110` ("Release 0.12.0"), tagged **`v0.12.0`**.
+- **Checks:** `Tests/run_tests.sh` and `Tests/run_host_tests.sh` pass; `Tools/install.sh
+  --validate`: **pluginval strictness 10 PASS**; the installed VST3 and Standalone report 0.12.0.
+- **GitHub release:** [DrumChimp 0.12.0](https://github.com/alistairrutherford/drumchimp/releases/tag/v0.12.0),
+  `DrumChimp-0.12.0-macOS-adhoc.zip` (10.1 MB; the VST3, the Standalone, README, CHANGELOG and
+  licence; universal) and its `.sha256`. Signed ad hoc and not notarized (no Developer ID on this
+  Mac); downloaded back and checked. Not run in Live.
