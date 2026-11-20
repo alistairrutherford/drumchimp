@@ -802,6 +802,30 @@ what its settings mean; elsewhere it shows a short hint.
 
   The editor snapshot was updated. `pluginval` strictness 10 passes.
 
+### Lane mute (2026-11-20)
+
+A mute button (a speaker) at the start of each step-grid lane, next to its lock, to hear the
+other lanes (you asked for it).
+
+- **How it works:**
+  - The button is the pad's **Mute** parameter, attached like the pad panel's, so the two
+    always agree. It's saved with the set and can be automated in Live.
+  - Muting silences the sound only. The lane's hits stay in the pattern and still go to MIDI out
+    and Drag MIDI, as with a pad's Mute in a Drum Rack.
+- **Muted look:** the speaker is crossed out in amber, the lane's name and hits turn grey, and its
+  pad shows *Muted* in place of its note.
+- **The grid's labels are wider:** 112 px, with room for both buttons.
+- **Info View:** the button has an entry (*Lane mute*) and a hover area on every lane.
+- **Tests** (host test 16), all passing:
+  - every lane has a button;
+  - clicking the kick lane's turns on Pad 1's Mute, and a House bar is then silent while its
+    four kicks still go to MIDI out;
+  - clicking again brings it back;
+  - the button follows Mute set anywhere else.
+
+  The Info View test now covers 58 areas. The snapshot was updated, and the README screenshot
+  shows a muted lane. `pluginval` strictness 10 passes.
+
 ### Release 0.12.0 (2026-11-18)
 
 The first GitHub release.

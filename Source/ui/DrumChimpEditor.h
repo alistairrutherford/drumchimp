@@ -17,7 +17,7 @@
 //               Swing and Humanise
 //   Step grid   the pattern: a lane per pad, velocity as brightness, rolls as dots, the playhead.
 //               Click a step to add or remove a hit, drag a hit up or down for its velocity; lock a
-//               lane to keep it through Generate.
+//               lane to keep it through Generate; mute a lane (its pad's Mute) to hear the others.
 //   Settings    the library's places (from Live, and folders added here), Add folder, Remove,
 //               Rescan; why Ableton Pack samples aren't there
 //   Status      transport, notes in and out, or a warning (a clip doubling the generator, a
@@ -46,11 +46,11 @@ namespace drumchimp
         bool dragging = false;
     };
 
-    // A small drawn button: a padlock (toggles) or a die.
+    // A small drawn button: a padlock or a speaker (both toggle), or a die.
     class IconButton : public juce::Button
     {
     public:
-        enum class Icon { lock, dice };
+        enum class Icon { lock, dice, mute };
         IconButton (Icon i, const juce::String& name);
         void paintButton (juce::Graphics&, bool highlighted, bool down) override;
 
@@ -116,6 +116,8 @@ namespace drumchimp
         bool cellAt (juce::Point<int> p, int& pad, int& step) const;
         const Pattern& shownPattern() const noexcept { return pattern; }
         const juce::Component& laneLock (int pad) const { return *locks[(size_t) pad]; }
+        juce::Button& laneMute (int pad) { return *mutes[(size_t) pad]; }
+        const juce::Component& laneMute (int pad) const { return *mutes[(size_t) pad]; }
         bool draggingCell (int& pad, int& step) const noexcept   // a hit being dragged for its velocity
         {
             pad = pressedPad;
@@ -130,9 +132,10 @@ namespace drumchimp
         Pattern pattern;
         int pressedPad = -1, pressedStep = -1, pressedVelocity = 0;
         bool dragged = false;
-        std::vector<std::unique_ptr<IconButton>> locks;
+        std::vector<std::unique_ptr<IconButton>> locks, mutes;
+        std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> muteAttachments;   // to each pad's Mute
         int playhead = -1;
-        static constexpr int labelWidth = 92;
+        static constexpr int labelWidth = 112;
     };
 
     // The library, filtered, as a list. Click: hear it. Double-click: load it into the selected pad.
@@ -300,6 +303,7 @@ namespace drumchimp
         StepGrid grid;
         SettingsPanel settings;
         juce::uint32 seenPattern = ~0u;
+        juce::uint32 seenMutes = 0;        // the pads' Mute, as bits: the grid and pads redraw when it changes
         juce::uint32 doubledUntil = 0;     // ms: the status line warns until then
 
         juce::Label status, libraryStatus;

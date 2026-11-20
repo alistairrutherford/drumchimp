@@ -28,14 +28,16 @@
 //   12. Places   a folder added in Settings is scanned and sorted; removed, it's gone
 //   13. CPU      Trap at its busiest, 20 s at 48 kHz / 512: under 2% of a core
 //   14. Snapshot the editor in a known state against Tests/fixtures/snapshot/editor.png
+//   16. Lane mute the grid's mute button is the pad's Mute: clicking it silences the pad while its
+//                notes still go to MIDI out; clicking again brings it back
 //   15. Info View every parameter has a description (at most 200 characters), every control,
 //                display and panel has a hover area, the strip itself isn't one, and a pad and a
 //                grid step say what they hold
 //
 //   DrumChimpHost [--update-snapshot | --no-library (with DRUMCHIMP_LIBRARY=none) | --screenshot FILE]
 //
-// --screenshot writes the README's picture: the default kit, a House pattern, the Info View on
-// Complexity, at 2×.
+// --screenshot writes the README's picture: the default kit, a House pattern with its open hats
+// muted, the Info View on a lane's mute, at 2×.
 //
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../../Source/plugin/DrumChimpProcessor.h"
@@ -1062,12 +1064,13 @@ namespace
         setParam (p, "style", 5.0f);                   // House
         setParam (p, "density", 0.65f);
         setParam (p, "complexity", 0.55f);
+        setParam (p, "p5_mute", 1.0f);                // the open hats muted, to show a muted lane
         juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         editor->setSize (DrumChimpEditor::baseWidth, DrumChimpEditor::baseHeight);
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
         if (auto* ed = dynamic_cast<DrumChimpEditor*> (editor.get()))
-            ed->showInfoFor ("complexity");            // the Info View, as if pointing at Complexity
+            ed->showInfoFor ("grid.mute");             // the Info View, as if pointing at a lane's mute
         file.getParentDirectory().createDirectory();
         file.deleteFile();
         juce::FileOutputStream out (file);
@@ -1112,7 +1115,8 @@ namespace
         wanted.erase (std::remove (wanted.begin(), wanted.end(), "instance"), wanted.end());   // not shown
         for (const char* k : { "settings", "drag", "randomise", "undo", "redo", "kitsource", "kit.family", "kits", "pad.lock", "pad.dice",
                                "browser", "browser.role", "browser.search", "browser.list", "group.pad", "pad.role", "pad.sample", "pad.load",
-                               "pad.clear", "group.pattern", "generate", "grid", "grid.step", "grid.lock", "display.status", "display.library" })
+                               "pad.clear", "group.pattern", "generate", "grid", "grid.step", "grid.lock", "grid.mute", "display.status",
+                               "display.library" })
             wanted.push_back (k);
         for (int pad = 0; pad < numPads; ++pad)
             wanted.push_back ("pad:" + std::to_string (pad));
@@ -1139,6 +1143,78 @@ namespace
         check (editor->info().getTitle().startsWith ("Kick · bar 1, beat 1 · velocity "), "a grid step names its lane, bar, beat and velocity: " + editor->info().getTitle());
         editor->showInfoFor ({});
         check (editor->info().getTitle().isEmpty() && editor->info().getText().startsWith ("Point at"), "elsewhere, a short hint");
+    }
+
+    void collectButtons (juce::Component& c, const juce::String& name, std::vector<juce::Button*>& out)
+    {
+        for (auto* child : c.getChildren())
+        {
+            if (auto* b = dynamic_cast<juce::Button*> (child); b != nullptr && b->getName() == name)
+                out.push_back (b);
+            collectButtons (*child, name, out);
+        }
+    }
+
+    void testLaneMute (const Files& f)
+    {
+        std::cout << "16. Lane mute\n";
+        DrumChimpProcessor p;
+        prepare (p);
+        p.loadSample (0, f.click);
+        for (int pad = 1; pad < numPads; ++pad)
+            p.clearPad (pad);
+        waitFor ([&] { return allSettled (p); });
+        setParam (p, "style", 5.0f);                   // House: a kick on every beat
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+        std::vector<juce::Button*> mutes;
+        collectButtons (*editor, "Mute this lane", mutes);
+        check (mutes.size() == (size_t) numPads, "a mute button on every lane (" + juce::String ((int) mutes.size()) + ")");
+        if (mutes.size() != (size_t) numPads)
+            return;
+
+        FakePlayHead head;
+        head.info.setIsPlaying (true);
+        head.info.setBpm (120.0);
+        p.setPlayHead (&head);
+        Block b;
+        const auto playBar = [&] (float& peak, int& kicksOut)
+        {
+            peak = 0.0f;
+            kicksOut = 0;
+            double ppq = 0.0;
+            for (int i = 0; i < 188; ++i)              // a bar at 120 BPM
+            {
+                head.info.setPpqPosition (ppq);
+                run (p, b);
+                peak = std::max (peak, b.audio.getMagnitude (0, 512));
+                for (const auto meta : b.midi)
+                    kicksOut += meta.getMessage().isNoteOn() && meta.getMessage().getNoteNumber() == 36 ? 1 : 0;
+                ppq += 512 * 2.0 / 48000.0;
+            }
+        };
+        float peak;
+        int kicks;
+        playBar (peak, kicks);
+        check (peak > 0.5f && kicks >= 4, "unmuted, the kick lane sounds (" + juce::String (kicks) + " kicks out)");
+
+        mutes[0]->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);   // a click is delivered as a message
+        check (p.state.getRawParameterValue ("p1_mute")->load() >= 0.5f, "clicking the kick lane's mute turns on Pad 1's Mute");
+        head.info.setIsPlaying (false);
+        run (p, b);
+        head.info.setIsPlaying (true);
+        playBar (peak, kicks);
+        check (peak < 1.0e-6f && kicks >= 4, "muted, it's silent, but its notes still go to MIDI out (" + juce::String (kicks) + ")");
+
+        mutes[0]->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        playBar (peak, kicks);
+        check (p.state.getRawParameterValue ("p1_mute")->load() < 0.5f && peak > 0.5f, "clicking again: it sounds again");
+        setParam (p, "p1_mute", 1.0f);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+        check (mutes[0]->getToggleState(), "and the lane button follows the pad's Mute set anywhere else");
+        p.setPlayHead (nullptr);
     }
 
     // With DRUMCHIMP_LIBRARY=none: a Mac without Ableton's library.
@@ -1194,6 +1270,7 @@ int main (int argc, char** argv)
             testCpu();
             testSnapshot (false);
             testInfoView();
+            testLaneMute (files);
         }
     }
     std::cout << (failures == 0 ? "\nDrumChimpHost: all passed\n" : "\n*** DrumChimpHost: " + std::to_string (failures) + " failure(s)\n");

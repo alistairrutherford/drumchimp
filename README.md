@@ -6,7 +6,7 @@ that you can record or drag into Live as MIDI clips.
 
 **Version 0.12.0** (2026-11-18). What changed: [CHANGELOG.md](CHANGELOG.md).
 
-![DrumChimp's window: twelve pads (Kick, Snare, Clap, Closed hat, Open hat, Low tom, High tom, Crash, Rim, Mid tom, Ride, Perc) with the Core Library's 909 kit; the kit bar with Randomise kit, Undo, Redo, From library and the Matched slider; the library browser and the selected pad's settings on the right; the pattern settings (House, 4 bars, Fill every 4, Generate, Density, Complexity, Swing, Humanise, Ghost notes); a House pattern in the step grid; and the Info View along the bottom describing Complexity](docs/screenshot.png)
+![DrumChimp's window: twelve pads (Kick, Snare, Clap, Closed hat, Open hat, Low tom, High tom, Crash, Rim, Mid tom, Ride, Perc) with the Core Library's 909 kit; the kit bar with Randomise kit, Undo, Redo, From library and the Matched slider; the library browser and the selected pad's settings on the right; the pattern settings (House, 4 bars, Fill every 4, Generate, Density, Complexity, Swing, Humanise, Ghost notes); a House pattern in the step grid with the Open hat lane muted (its speaker crossed out, its hits grey, and Muted on its pad); and the Info View along the bottom describing the lane mute button](docs/screenshot.png)
 
 The design, the decisions and the results of each phase are in [PLAN.md](PLAN.md).
 
@@ -115,10 +115,13 @@ role. The bottom-right corner shows how many it found. Click **Settings** to see
 are a roll.
 - **Click** an empty step to add a hit, or click a hit to remove it.
 - **Drag** a hit up or down to set its velocity.
-- The **padlock** at the start of a lane keeps that lane when you Generate or change a setting.
+- The **speaker** at the start of a lane mutes it, to hear the others; click it again to bring the
+  lane back. It's the pad's **Mute** (the same as in the pad settings), so the pad shows *Muted*.
+  A muted lane's hits stay in the pattern and still go to MIDI out and **Drag MIDI**.
+- The **padlock** next to it keeps that lane when you Generate or change a setting.
 
-Hand edits last until you change a setting or Generate. The pattern, your edits and the lane
-locks are saved with the Live set.
+Hand edits last until you change a setting or Generate. The pattern, your edits, the lane locks
+and mutes are saved with the Live set.
 
 **3/4 and 6/8 styles:** set Live's time signature to match. The status line tells you when they
 differ.

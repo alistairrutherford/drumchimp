@@ -92,15 +92,41 @@ namespace drumchimp
     //==========================================================================
     IconButton::IconButton (Icon i, const juce::String& name) : juce::Button (name), icon (i)
     {
-        setClickingTogglesState (icon == Icon::lock);
+        setClickingTogglesState (icon == Icon::lock || icon == Icon::mute);
     }
 
     void IconButton::paintButton (juce::Graphics& g, bool highlighted, bool down)
     {
         const auto r = getLocalBounds().toFloat().reduced (3.0f);
         const bool on = getToggleState();
-        g.setColour (on ? accent : highlighted || down ? drumchimp::text : faint);   // (Button has its own `text`)
-        if (icon == Icon::lock)
+        g.setColour (on ? (icon == Icon::mute ? warning : accent) : highlighted || down ? drumchimp::text : faint);   // (Button has its own `text`)
+        if (icon == Icon::mute)
+        {
+            // A speaker: its box and cone; muted, a cross where the sound would be, else a wave.
+            const float h = r.getHeight();
+            juce::Path speaker;
+            speaker.startNewSubPath (r.getX(), r.getY() + h * 0.35f);
+            speaker.lineTo (r.getX() + h * 0.25f, r.getY() + h * 0.35f);
+            speaker.lineTo (r.getX() + h * 0.55f, r.getY() + h * 0.08f);
+            speaker.lineTo (r.getX() + h * 0.55f, r.getY() + h * 0.92f);
+            speaker.lineTo (r.getX() + h * 0.25f, r.getY() + h * 0.65f);
+            speaker.lineTo (r.getX(), r.getY() + h * 0.65f);
+            speaker.closeSubPath();
+            g.fillPath (speaker);
+            const float x = r.getX() + h * 0.7f, cy = r.getCentreY();
+            if (on)
+            {
+                g.drawLine (x, cy - h * 0.2f, r.getRight(), cy + h * 0.2f, 1.5f);
+                g.drawLine (x, cy + h * 0.2f, r.getRight(), cy - h * 0.2f, 1.5f);
+            }
+            else
+            {
+                juce::Path wave;
+                wave.addCentredArc (r.getX() + h * 0.55f, cy, h * 0.3f, h * 0.3f, 0.0f, 0.6f, 2.55f, true);
+                g.strokePath (wave, juce::PathStrokeType (1.3f));
+            }
+        }
+        else if (icon == Icon::lock)
         {
             const auto body = r.withTrimmedTop (r.getHeight() * 0.45f);
             g.fillRoundedRectangle (body, 1.5f);
@@ -178,9 +204,11 @@ namespace drumchimp
         g.setColour (text);
         g.drawText (padRoleName (processor.padRole (index)), inner.removeFromTop (18), juce::Justification::topLeft);
         auto bottom = inner.removeFromBottom (20);
-        g.setFont (font (11.0f));
-        g.setColour (faint);
-        g.drawText (juce::MidiMessage::getMidiNoteName (noteForPad (noteMap, index), true, true, 3), bottom, juce::Justification::bottomRight);
+        const bool muted = processor.state.getRawParameterValue (params::padID (index, "mute"))->load() >= 0.5f;
+        g.setFont (font (11.0f, muted));
+        g.setColour (muted ? warning : faint);
+        g.drawText (muted ? juce::String ("Muted") : juce::MidiMessage::getMidiNoteName (noteForPad (noteMap, index), true, true, 3), bottom,
+                    juce::Justification::bottomRight);
         const bool problem = source.status == Status::missing || source.status == Status::failed;
         g.setColour (problem ? warning : source.status == Status::loaded ? dim : faint);
         g.setFont (font (12.0f));
@@ -216,6 +244,11 @@ namespace drumchimp
             locks.push_back (std::make_unique<IconButton> (IconButton::Icon::lock, "Lock this lane: Generate and setting changes keep it"));
             locks.back()->onClick = [this, pad] { processor.setLaneLocked (pad, locks[(size_t) pad]->getToggleState()); };
             addAndMakeVisible (*locks.back());
+            // The lane's mute is its pad's Mute: the same switch as in the pad's settings.
+            mutes.push_back (std::make_unique<IconButton> (IconButton::Icon::mute, "Mute this lane"));
+            muteAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+                processor.state, params::padID (pad, "mute"), *mutes.back()));
+            addAndMakeVisible (*mutes.back());
         }
         refresh();
     }
@@ -230,7 +263,11 @@ namespace drumchimp
         const auto cells = cellArea();
         const int rowHeight = cells.getHeight() / numPads;
         for (int pad = 0; pad < numPads; ++pad)
-            locks[(size_t) pad]->setBounds (labelWidth - 22, cells.getY() + pad * rowHeight + (rowHeight - 16) / 2, 16, 16);
+        {
+            const int y = cells.getY() + pad * rowHeight + (rowHeight - 16) / 2;
+            mutes[(size_t) pad]->setBounds (labelWidth - 42, y, 16, 16);
+            locks[(size_t) pad]->setBounds (labelWidth - 22, y, 16, 16);
+        }
     }
 
     void StepGrid::refresh()
@@ -285,9 +322,10 @@ namespace drumchimp
         for (int pad = 0; pad < numPads; ++pad)
         {
             const int y = cells.getY() + pad * rowHeight;
-            g.setColour (dim);
+            const bool muted = processor.state.getRawParameterValue (params::padID (pad, "mute"))->load() >= 0.5f;   // drawn grey
+            g.setColour (muted ? faint : dim);
             g.setFont (font (11.5f));
-            g.drawText (padRoleName (processor.padRole (pad)), 0, y, labelWidth - 26, rowHeight, juce::Justification::centredLeft);
+            g.drawText (padRoleName (processor.padRole (pad)), 0, y, labelWidth - 46, rowHeight, juce::Justification::centredLeft);
             for (int s = 0; s < steps; ++s)
             {
                 const auto r = juce::Rectangle<float> (cells.getX() + s * w, (float) y, w, (float) rowHeight).reduced (w > 8.0f ? 1.5f : 0.5f, 2.0f);
@@ -298,7 +336,7 @@ namespace drumchimp
                     g.fillRoundedRectangle (r, 2.0f);
                     continue;
                 }
-                g.setColour (accent.withAlpha (0.3f + 0.7f * (float) c.velocity / 127.0f));
+                g.setColour ((muted ? faint : accent).withAlpha (0.3f + 0.7f * (float) c.velocity / 127.0f));
                 g.fillRoundedRectangle (r, 2.0f);
                 if (c.repeats > 1 && r.getWidth() > 6.0f)
                 {
@@ -670,6 +708,8 @@ namespace drumchimp
             { "grid", "Step grid", "The pattern: a lane per pad, brighter for a harder hit, dots for a roll, and the playhead." },
             { "grid.step", "Step", "Click an empty step to add a hit, or a hit to remove it. Drag a hit up or down for its velocity." },
             { "grid.lock", "Lane lock", "A locked lane keeps its hits when you Generate or change a setting." },
+            { "grid.mute", "Lane mute",
+              "Silences this lane's pad, to hear the others: the pad's Mute. Its hits stay in the pattern and still go to MIDI out and Drag MIDI." },
 
             { "display.status", "Status",
               "Transport, tempo, notes in and out. Or a warning: a clip doubling the generator, a missing sample, or a time signature that differs from the style's." },
@@ -1127,6 +1167,17 @@ namespace drumchimp
             grid.refresh();
         }
         grid.setPlayhead (processor.playingStep());
+        juce::uint32 mutes = 0;
+        for (int pad = 0; pad < numPads; ++pad)
+            if (processor.state.getRawParameterValue (params::padID (pad, "mute"))->load() >= 0.5f)
+                mutes |= 1u << pad;
+        if (mutes != seenMutes)                    // from the lane buttons, the pad panel or automation
+        {
+            seenMutes = mutes;
+            grid.repaint();
+            for (auto& pad : pads)
+                pad->repaint();
+        }
 
         const auto played = processor.takeHits();
         for (int i = 0; i < numPads; ++i)
@@ -1342,6 +1393,7 @@ namespace drumchimp
             addInfoRegion (pads[(size_t) i]->diceButton(), "pad.dice");
             addInfoRegion (*pads[(size_t) i], "pad:" + juce::String (i));
             addInfoRegion (grid.laneLock (i), "grid.lock");
+            addInfoRegion (grid.laneMute (i), "grid.mute");
         }
         addInfoRegion (browser.roleBox(), "browser.role");
         addInfoRegion (browser.searchBox(), "browser.search");
