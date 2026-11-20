@@ -4,7 +4,7 @@ A drum instrument plug-in (VST3) for Ableton Live 12 on macOS. It builds 12-pad 
 samples in your Ableton library, randomises new kits, and generates drum patterns in 24 styles
 that you can record or drag into Live as MIDI clips.
 
-**Version 0.12.0** (2026-11-18). What changed: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.13.0** (2026-11-20). What changed: [CHANGELOG.md](CHANGELOG.md).
 
 ![DrumChimp's window: twelve pads (Kick, Snare, Clap, Closed hat, Open hat, Low tom, High tom, Crash, Rim, Mid tom, Ride, Perc) with the Core Library's 909 kit; the kit bar with Randomise kit, Undo, Redo, From library and the Matched slider; the library browser and the selected pad's settings on the right; the pattern settings (House, 4 bars, Fill every 4, Generate, Density, Complexity, Swing, Humanise, Ghost notes); a House pattern in the step grid with the Open hat lane muted (its speaker crossed out, its hits grey, and Muted on its pad); and the Info View along the bottom describing the lane mute button](docs/screenshot.png)
 

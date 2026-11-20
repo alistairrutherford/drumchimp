@@ -839,3 +839,16 @@ The first GitHub release.
   `DrumChimp-0.12.0-macOS-adhoc.zip` (10.1 MB; the VST3, the Standalone, README, CHANGELOG and
   licence; universal) and its `.sha256`. Signed ad hoc and not notarized (no Developer ID on this
   Mac); downloaded back and checked. Not run in Live.
+
+### Release 0.13.0 (2026-11-20)
+
+- **Version:** 0.13.0 in `DrumChimp.jucer` and `Tests/Host/HostDefines.h`, the README's version
+  line and `CHANGELOG.md` (0.13.0: lane mute). The README screenshot was remade with
+  `DrumChimpHost --screenshot`. `Tools/install.sh`'s closing message now points at the README's
+  *Getting started* (it named the removed *Phase 0 spikes* section). Tagged **`v0.13.0`**.
+- **Checks:** `Tests/run_tests.sh` and `Tests/run_host_tests.sh` pass (snapshot 0.000% different);
+  `Tools/install.sh --validate`: **pluginval strictness 10 PASS**; the built VST3 and Standalone
+  report 0.13.0 and are universal (x86_64, arm64).
+- **Package:** `DrumChimp-0.13.0-macOS-adhoc.zip` (10.1 MB, the same layout as 0.12.0) and its
+  `.sha256`, in `dist/release-0.13.0/`. Unzipped and its signature checked. Signed ad hoc, not
+  notarized. Not run in Live.

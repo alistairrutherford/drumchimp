@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 (2026-11-20)
+
+### Added
+
+- **Lane mute:** a speaker button at the start of each step-grid lane, next to its padlock. Click
+  it to silence that lane's pad and hear the others; click again to bring it back. It's the pad's
+  own **Mute**, so the pad shows *Muted* and the lane's hits turn grey. A muted lane's hits stay in
+  the pattern and still go to MIDI out and Drag MIDI, and the mutes are saved with the Live set.
+- The README's screenshot shows a muted lane, with the Info View describing the mute button.
+
 ## 0.12.0 (2026-11-18)
 
 The first version published as a GitHub release, as a universal macOS zip (signed ad hoc, not

@@ -132,5 +132,5 @@ fi
 cat <<EOF
 == done. In Ableton Live: Settings → Plug-Ins → turn on "Use VST3 Plug-In System Folders"
    (once), then Rescan, or restart Live. DrumChimp appears under Plug-Ins → VST3 → Alistair
-   Rutherford. Put it on a MIDI track (README.md, "Phase 0 spikes").
+   Rutherford. Put it on a MIDI track (README.md, "Getting started").
 EOF
