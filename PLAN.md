@@ -849,6 +849,8 @@ The first GitHub release.
 - **Checks:** `Tests/run_tests.sh` and `Tests/run_host_tests.sh` pass (snapshot 0.000% different);
   `Tools/install.sh --validate`: **pluginval strictness 10 PASS**; the built VST3 and Standalone
   report 0.13.0 and are universal (x86_64, arm64).
-- **Package:** `DrumChimp-0.13.0-macOS-adhoc.zip` (10.1 MB, the same layout as 0.12.0) and its
-  `.sha256`, in `dist/release-0.13.0/`. Unzipped and its signature checked. Signed ad hoc, not
-  notarized. Not run in Live.
+- **GitHub release:** [DrumChimp 0.13.0](https://github.com/alistairrutherford/drumchimp/releases/tag/v0.13.0),
+  `DrumChimp-0.13.0-macOS-adhoc.zip` (10.1 MB, the same layout as 0.12.0) and its `.sha256`, made
+  through the GitHub API with git's saved login (no `gh` on this Mac). Unzipped and its signature
+  checked before upload; downloaded back and the checksum matches. Signed ad hoc, not notarized.
+  Not run in Live.
