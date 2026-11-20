@@ -854,3 +854,13 @@ The first GitHub release.
   through the GitHub API with git's saved login (no `gh` on this Mac). Unzipped and its signature
   checked before upload; downloaded back and the checksum matches. Signed ad hoc, not notarized.
   Not run in Live.
+
+### Lane mute in Live (2026-11-20)
+
+`Tests/live/run_live_tests.py` has a sixth test, **Lane mute**, on the pad Mute that a lane's
+speaker button switches. In House, with pads 2–12 muted, DrumChimp's track sounds (the kick alone,
+peak about 0.9 on Live's meter); with the kick muted as well it's silent (peak 0.0), while *MIDI
+From* still records the same notes, all 8 kicks included; unmuted, the kick sounds again. It puts
+every Mute back to off after. The meter is read only once Live's transport is moving: Live starts
+recording a moment after it's asked to, and reading straight away saw silence. Two full runs on the
+installed 0.13.0: all 17 checks pass.

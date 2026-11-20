@@ -20,6 +20,9 @@ puts the tempo back. It records into the Arrangement from beat 0 on its own trac
   5. 3/4        with Live's set in 3/4, Waltz: every note on its sixteenth, the kick on the 1 of
                 every 3-beat bar and nowhere else, the snare on 2 and 3 (the set goes back to its
                 own time signature after)
+  6. Lane mute  the pad Mute that a step-grid lane's speaker button turns on, in House: with only
+                the kick unmuted DrumChimp's track sounds; with the kick muted too it's silent, and
+                MIDI From still records every note, the kick's included, the same as before
 
   python3 Tests/live/run_live_tests.py
 """
@@ -97,6 +100,25 @@ def record(live, beats, rec_tracks):
     finally:
         live.call("stop_recording", mode="arrangement", stop_transport=True)
     return [live.call("get_clip_notes", track=t, source="arrangement")["notes"] for t in rec_tracks]
+
+
+def record_with_peak(live, beats, rec, meter_track):
+    """Record `beats` from beat 0 on `rec`, and the loudest `meter_track` got while it played."""
+    seconds = beats * 60.0 / live.call("get_state", include_devices=False)["tempo"]
+    live.call("start_recording", mode="arrangement", from_beat=0.0)
+    try:
+        live.wait_song_time(0.25, seconds + 10)          # recording starts a moment after it's asked for
+        peak = live.peak_meter(meter_track, seconds * 0.75)
+        live.wait_song_time(beats + 0.25, seconds * 2 + 10)
+    finally:
+        live.call("stop_recording", mode="arrangement", stop_transport=True)
+    return live.call("get_clip_notes", track=rec, source="arrangement")["notes"], peak
+
+
+def set_mute(live, track, pad, on):
+    """Pad `pad`'s Mute (1-based), the parameter its lane's speaker button switches."""
+    live.call("set_parameter", track=track, device=0, parameter="Pad %d Mute" % pad, value=1.0 if on else 0.0)
+    return live.call("get_parameter", track=track, device=0, parameter="Pad %d Mute" % pad)["value"]
 
 
 def clear(live, rec_tracks):
@@ -200,6 +222,40 @@ def test_three_four(live, source, rec):
     check(snares >= {1.0, 2.0, 4.0, 5.0, 7.0, 8.0, 10.0, 11.0}, "the snare on 2 and 3 of every bar")
 
 
+def test_lane_mute(live, source, rec):
+    print("6. Lane mute: a muted pad is silent, and its notes still go out")
+    live.call("set_song_properties", signature_numerator=4, signature_denominator=4)
+    shown = set_param(live, source, "Style", "House")
+    set_param(live, source, "Humanise", 0.0)
+    set_param(live, source, "Fill", "Off")
+    set_param(live, source, "Swing", 0.5)
+    try:
+        others = [set_mute(live, source, pad, True) for pad in range(2, 13)]
+        time.sleep(1.0)                      # anything still ringing dies away
+        clear(live, [rec])
+        kick_only, loud = record_with_peak(live, 8, rec, source)
+        kick_only = starts(kick_only, 8.0 - 1e-6)
+        check(shown == "House" and all(v >= 0.5 for v in others) and loud > 0.05,
+              "pads 2-12 muted, the kick alone: the track sounds (peak %.3f)" % loud)
+        muted = set_mute(live, source, 1, True)
+        time.sleep(1.0)
+        clear(live, [rec])
+        silent_notes, quiet = record_with_peak(live, 8, rec, source)
+        silent_notes = starts(silent_notes, 8.0 - 1e-6)
+        check(muted >= 0.5 and quiet < 0.001, "the kick muted too: silent (peak %.4f)" % quiet)
+        kicks = [t for t, p, v in silent_notes if p == 36]
+        check(silent_notes == kick_only and len(kicks) == 8,
+              "MIDI From still gets every note: %d, the 8 kicks among them, the same as before" % len(silent_notes))
+        back = set_mute(live, source, 1, False)
+        time.sleep(0.3)
+        clear(live, [rec])
+        _, again = record_with_peak(live, 4, rec, source)
+        check(back < 0.5 and again > 0.05, "unmuted, the kick sounds again (peak %.3f)" % again)
+    finally:
+        for pad in range(1, 13):
+            set_mute(live, source, pad, False)
+
+
 def main():
     live = LiveClient().connect()
     state = live.call("get_state", include_devices=False)
@@ -224,6 +280,7 @@ def main():
         test_state(live, index_of(live, PREFIX + "DrumChimp"), rec)
         test_twelve_pads(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
         test_three_four(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
+        test_lane_mute(live, index_of(live, PREFIX + "DrumChimp"), index_of(live, PREFIX + "rec"))
     finally:
         live.call("stop_transport")
         for t in sorted((t["index"] for t in tracks(live) if t["name"].startswith(PREFIX)), reverse=True):

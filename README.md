@@ -184,8 +184,8 @@ deliberate UI change.
 python3 Tests/live/run_live_tests.py
 ```
 
-Tests in Live through ClaudeLiveBridge: *MIDI From* timing, swing, saved state, the 12 pads, and
-3/4. They add their own tracks and leave the set as it was.
+Tests in Live through ClaudeLiveBridge: *MIDI From* timing, swing, saved state, the 12 pads, 3/4,
+and lane mute. They add their own tracks and leave the set as it was.
 
 ```bash
 Tests/run_validation.sh
